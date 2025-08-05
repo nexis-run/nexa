@@ -62,7 +62,7 @@ func (c *Context) SendResponse(params ...any) error {
 	buffer := &bytes.Buffer{}
 	encoder := jsoniter.NewEncoder(buffer)
 	encoder.SetEscapeHTML(false)
-	_ = encoder.Encode(NewResponse().SetParams(params...))
+	_ = encoder.Encode(NewResponse[any]().SetParams(params...))
 
 	return c.JSONBlob(http.StatusOK, buffer.Bytes())
 }

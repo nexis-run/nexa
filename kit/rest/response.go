@@ -32,39 +32,39 @@ func NewError(code int, message string) *Error {
 	return err
 }
 
-type Response struct {
+type Response[T any] struct {
 	Code    int    `json:"code"`
 	Message string `json:"message,omitempty"`
-	Data    any    `json:"data,omitempty"`
+	Data    *T     `json:"data,omitempty"`
 }
 
-func NewResponse() *Response {
-	return &Response{
+func NewResponse[T any]() *Response[T] {
+	return &Response[T]{
 		Code:    http.StatusOK,
 		Message: "",
 	}
 }
 
 // SetCode 设置code
-func (r *Response) SetCode(code int) *Response {
+func (r *Response[T]) SetCode(code int) *Response[T] {
 	r.Code = code
 	return r
 }
 
 // SetMessage 设置message
-func (r *Response) SetMessage(message string) *Response {
+func (r *Response[T]) SetMessage(message string) *Response[T] {
 	r.Message = message
 	return r
 }
 
 // SetData 设置data
-func (r *Response) SetData(data any) *Response {
+func (r *Response[T]) SetData(data *T) *Response[T] {
 	r.Data = data
 	return r
 }
 
 // SetParams 设置响应参数
-func (r *Response) SetParams(params ...any) *Response {
+func (r *Response[T]) SetParams(params ...any) *Response[T] {
 	for i := 0; i < len(params); i++ {
 		switch v := params[i].(type) {
 		case int:
@@ -80,10 +80,14 @@ func (r *Response) SetParams(params ...any) *Response {
 				message = fmt.Sprintf("%v", he.Message)
 			}
 			r.SetMessage(message)
-		default:
+		case *T:
 			if r.Data == nil {
 				r.SetData(v)
 			}
+			// default:
+			// 	if r.Data == nil {
+			// 		r.SetData(v)
+			// 	}
 		}
 	}
 
