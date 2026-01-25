@@ -1,0 +1,73 @@
+// Copyright (C) oos. 2026-present.
+//
+// Created at 2026-01-24, by liasica
+
+package di
+
+import (
+	"context"
+
+	"github.com/google/wire"
+	"github.com/redis/go-redis/v9"
+
+	"auroraride.com/oos/internal/config"
+	"auroraride.com/oos/internal/infrastructure/dao"
+	"auroraride.com/oos/internal/infrastructure/ent"
+	"auroraride.com/oos/internal/integration/auth"
+	"auroraride.com/oos/internal/integration/captcha"
+	"auroraride.com/oos/internal/integration/wxapp"
+)
+
+var C *Container
+
+type Container struct {
+	// 配置中心
+	Config *config.Config
+
+	// 持久化
+	Database *ent.Client
+	Redis    *redis.Client
+
+	// 集成服务
+	Integration *Intergration
+
+	// Dao
+	Dao *Dao
+}
+
+func redisProviderSet(cfg *config.Config) (rdb *redis.Client, err error) {
+	rdb = redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr,
+		Username: cfg.Redis.Username,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+	err = rdb.Ping(context.Background()).Err()
+	return
+}
+
+type Dao struct {
+	Agreement *dao.AgreementDao
+	Brand     *dao.BrandDao
+	City      *dao.CityDao
+	Manager   *dao.ManagerDao
+	System    *dao.SystemDao
+}
+
+var daoProviderSet = wire.NewSet()
+
+// Intergration 集成服务
+// 集成所有第三方或外部服务
+type Intergration struct {
+	Auth    *auth.Auth
+	Captcha *captcha.Captcha
+	WxApp   *wxapp.WxApp
+}
+
+func intergrationProviderSet(cfg *config.Config, rdb *redis.Client) *Intergration {
+	return &Intergration{
+		Auth:    auth.New(rdb, cfg.Auth.JwtKey),
+		Captcha: captcha.New(rdb),
+		WxApp:   wxapp.New(cfg.WxApp.AppId, cfg.WxApp.AppSecret, rdb),
+	}
+}

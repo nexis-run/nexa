@@ -14,13 +14,15 @@ type {{ .Name }}Dao struct {
     orm *ent.{{ .Name }}Client
 }
 
-func New{{ .Name }}(params ...*ent.{{ .Name }}Client) *{{ .Name }}Dao {
-    orm := {{ .OrmClient }}.{{ .Name }}
-    if len(params) > 0 {
-        orm = params[0]
-    }
-
+func New{{ .Name }}() *{{ .Name }}Dao {
     return &{{ .Name }}Dao{
-        orm: orm,
+        orm: {{ .OrmClient }}.{{ .Name }},
     }
+}
+
+// Tx 使用事务
+func (dao *{{ .Name }}Dao) Tx(tx *ent.Tx) *{{ .Name }}Dao {
+	return &{{ .Name }}Dao{
+		orm: tx.{{ .Name }},
+	}
 }

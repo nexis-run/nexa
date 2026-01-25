@@ -29,6 +29,11 @@ type Config struct {
 	EntPath     string `yaml:"entPath"`     // ent 目录，默认值：internal/infrastructure/ent
 	DaoPath     string `yaml:"daoPath"`     // 数据访问对象目录，默认值：internal/infrastructure/dao
 	EchoctxPath string `yaml:"echoctxPath"` // Echo 上下文目录，默认值：internal/app/rest/app
+
+	DI struct {
+		Path           string `yaml:"path"`           // 依赖注入生成文件路径，默认值：internal/di/di.go
+		DaoProviderSet string `yaml:"daoProviderSet"` // Dao 提供者集合变量名称，默认值：daoProviderSet
+	} `yaml:"di"` // 依赖注入配置
 }
 
 func defaultConfig() *Config {
