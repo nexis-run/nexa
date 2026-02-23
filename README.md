@@ -1,96 +1,129 @@
 # Nexa
 
+Nexa 是一个面向 **NEXA 框架** 的实用工具（CLI），用于辅助项目初始化、配置管理与代码生成等工作。
 
+> CLI 基于 [cobra](https://github.com/spf13/cobra) 实现，支持通过 `-c/--config` 指定配置文件（默认 `.nexa.yaml`）。
 
-## Tips
+## Install
 
+### Option 1: go install
 
-
-### Commit 格式规范
-
-> 参考文章 [Commit message 和 Change log 编写指南](https://www.ruanyifeng.com/blog/2016/01/commit_message_change_log.html)
-
+```bash
+go install nexis.run/nexa/cmd/nexa@latest
 ```
+
+### Option 2: build from source
+
+```bash
+git clone https://github.com/nexisproject/nexa.git
+cd nexa
+go build -o nexa ./cmd/nexa
+./nexa --help
+```
+
+## Usage
+
+```bash
+# 查看帮助
+nexa --help
+
+# 查看版本
+nexa version
+
+# 指定配置文件（默认 .nexa.yaml）
+nexa -c .nexa.yaml <command>
+```
+
+## Configuration
+
+- 默认配置文件名：`.nexa.yaml`
+- 可以通过 `-c/--config` 指定其它配置文件路径
+- 通过 `config init` 可以生成默认配置文件
+
+## Commands
+
+### config
+
+初始化/管理配置。
+
+```bash
+# 在当前配置路径生成默认配置文件（若已存在会失败）
+nexa config init
+```
+
+### new
+
+生成代码模板（支持覆盖输出文件）。
+
+```bash
+# 覆盖已存在文件
+nexa new --force <subcommand>
+# 或
+nexa new -f <subcommand>
+```
+
+#### new dao
+
+新建数据访问对象（DAO）模板。
+
+- 参数 `names` 必须以大写字母开头（例如 `User`、`OrderItem`）
+
+```bash
+nexa new dao User
+nexa new dao User --force
+```
+
+#### new echoctx
+
+已注册该子命令，但 README 暂未补充详细说明（以 `nexa new --help` 为准）。
+
+### ent
+
+ent 相关命令。
+
+#### ent new
+
+新建 ent schema（名称必须以大写字母开头）。
+
+```bash
+nexa ent new Example
+```
+
+#### ent generate
+
+根据 ent schema 生成代码。
+
+```bash
+nexa ent generate
+```
+
+## Development
+
+### Commit message convention
+
+参考：[Commit message 和 Change log 编写指南](https://www.ruanyifeng.com/blog/2016/01/commit_message_change_log.html)
+
+建议格式：
+
+```text
 [<type>](<scope>) <subject> (#pr)
-docs：                   文档变动
-fix：                    bug 修复
-feat：                   新增功能
-feat-wip：               开发中的功能，比如某功能的部分代码。
-improvement：            原有功能的优化和改进
-style：                  代码风格调整
-typo：                   代码或文档勘误
-refactor：               代码重构（不涉及功能变动）
-performance/optimize：   性能优化
-test：                   单元测试的添加或修复
-chore：                  构建工具的修改
-revert：                 回滚
-deps：                   第三方依赖库的修改
-community：              社区相关的修改，如修改 Github Issue 模板等。
+
+docs:          文档变动
+fix:           bug 修复
+feat:          新增功能
+feat-wip:      开发中的功能
+improvement:   原有功能优化
+style:         代码风格调整
+typo:          代码或文档勘误
+refactor:      代码重构（不涉及功能变动）
+performance:   性能优化
+test:          单元测试添加或修复
+chore:         构建工具修改
+revert:        回滚
+deps:          第三方依赖修改
+community:     社区相关修改
 ```
 
-### 拉取依赖仓库
+## License
 
-```shell
-# 添加脚本（仅需添加一次）
-cat <<'EOF' > /usr/local/bin/append-go-env
-#!/bin/bash
-
-function join() {
-    local IFS="$1"
-    shift
-    echo "$*"
-}
-
-function append() {
-  arr=()
-  IFS=',' read -r -a arr <<< "$(go env "$1")"
-  arr+=("$2")
-  #arr=($(echo "${arr[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-  read -r -a arr <<< "$(echo "${arr[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' ')"
-  str=$(join , "${arr[@]}")
-  go env -w "$1=$str"
-  go env "$1"
-}
-
-append "$@"
-EOF
-
-chmod +x /usr/local/bin/append-go-env
-
-# 使用ssh替换https（仅需设置一次）
-git config --global url."git@gitlab.liasica.com:".insteadof "https://gitlab.liasica.com/"
-
-# 设置环境变量（仅需设置一次）
-append-go-env GOPRIVATE "nexis.run"
-append-go-env GONOPROXY "nexis.run"
-append-go-env GONOSUMDB "nexis.run"
-
-# 安装依赖
-go get -u -v nexis.run/nexa
-```
-
-### 防止静态检查工具误报
-
-```go
-// 误报func
-var _ = Setup
-
-func Setup() {}
-
-// 误报interface
-var _ Hello = (*HelloImpl)(nil)
-
-type Hello interface {
-    World()
-}
-
-type HelloImpl struct{}
-```
-
-## 基本结构
-
-
-
-
-### HAProxy
-- [01 . HAProxy原理使用和配置](https://www.cnblogs.com/you-men/p/12979599.html)
+MIT License. See [LICENSE](LICENSE).
