@@ -68,11 +68,17 @@ func (w *DumpResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (w *DumpResponseWriter) Flush() {
-	w.ResponseWriter.(http.Flusher).Flush()
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 func (w *DumpResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	return w.ResponseWriter.(http.Hijacker).Hijack()
+	if hijacker, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return hijacker.Hijack()
+	}
+
+	return nil, nil, http.ErrNotSupported
 }
 
 func dumpBuffer(cfg *DumpConfig, c echo.Context, reqBody, resBody []byte) []byte {

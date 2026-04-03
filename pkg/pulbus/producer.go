@@ -75,7 +75,7 @@ func (producer *Producer) log(level zapcore.Level, message string, data pulsar.M
 	zap.L().Log(level, "[Pulsar Producer] "+message, zap.ByteString("message", b), zap.String("topic", producer.Topic()))
 }
 
-// getProducer 获取 Producer
+// getProducer 获取 Producer（使用 LoadOrStore 避免并发创建）
 func (bus *Pulbus) getProducer(topic string, opts pulsar.ProducerOptions) (pulsar.Producer, error) {
 	// 尝试从缓存中获取
 	if p, ok := bus.producers.Load(topic); ok {
@@ -90,8 +90,13 @@ func (bus *Pulbus) getProducer(topic string, opts pulsar.ProducerOptions) (pulsa
 		return nil, err
 	}
 
-	// 存入缓存
-	bus.producers.Store(topic, producer)
+	// 使用 LoadOrStore 原子操作，避免并发创建多个 producer
+	actual, loaded := bus.producers.LoadOrStore(topic, producer)
+	if loaded {
+		// 已存在其他 goroutine 创建的 producer，关闭当前的
+		producer.Close()
+		return actual.(pulsar.Producer), nil
+	}
 
 	return producer, nil
 }

@@ -73,6 +73,13 @@ func (w *Writer) With(fn func(reader *kafka.Writer)) *Writer {
 // SendMessages 发送消息到Kafka
 func (w *Writer) SendMessages(ctx context.Context, messages ...kafka.Message) (err error) {
 	for i := 0; i < w.retries; i++ {
+		// 检查外层 ctx 是否已取消，避免无意义重试
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		err = w.writeMessagesWithTimeout(ctx, messages...)
 		if errors.Is(err, kafka.LeaderNotAvailable) || errors.Is(err, kafka.UnknownTopicOrPartition) || errors.Is(err, context.DeadlineExceeded) {
 			time.Sleep(w.retryInterval)

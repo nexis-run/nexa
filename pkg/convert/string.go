@@ -4,7 +4,10 @@
 
 package convert
 
-import "unsafe"
+import (
+	"math"
+	"unsafe"
+)
 
 // UnsafeBytes2String 将字节切片无拷贝转换为字符串
 func UnsafeBytes2String(b []byte) string {
@@ -41,7 +44,7 @@ func Uint64sToInterfaces(vals []uint64) []any {
 	return result
 }
 
-// StringToUint64 解析字符串为 uint64，失败返回 false
+// StringToUint64 解析字符串为 uint64，失败或溢出返回 false
 func StringToUint64(s string) (uint64, bool) {
 	if len(s) == 0 {
 		return 0, false
@@ -49,12 +52,20 @@ func StringToUint64(s string) (uint64, bool) {
 
 	var n uint64
 
-	for _, ch := range []byte(s) {
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
 		if ch < '0' || ch > '9' {
 			return 0, false
 		}
 
-		n = n*10 + uint64(ch-'0')
+		digit := uint64(ch - '0')
+
+		// 溢出检查
+		if n > math.MaxUint64/10 || (n == math.MaxUint64/10 && digit > math.MaxUint64%10) {
+			return 0, false
+		}
+
+		n = n*10 + digit
 	}
 
 	return n, true

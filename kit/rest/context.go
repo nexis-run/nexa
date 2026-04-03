@@ -80,7 +80,10 @@ func (c *Context) SendResponse(params ...any) error {
 	buffer := &bytes.Buffer{}
 	encoder := sonic.ConfigDefault.NewEncoder(buffer)
 	encoder.SetEscapeHTML(false)
-	_ = encoder.Encode(NewResponse().SetParams(params...))
+
+	if err := encoder.Encode(NewResponse().SetParams(params...)); err != nil {
+		return err
+	}
 
 	return c.JSONBlob(http.StatusOK, buffer.Bytes())
 }

@@ -28,5 +28,7 @@ func New(brokers []string) *Clara {
 		writers: cmap.New[*Writer](),
 	}
 
+	instances.Set(key, c)
+
 	return c
 }

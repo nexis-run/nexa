@@ -51,7 +51,7 @@ func (consumer *Consumer) log(level zapcore.Level, message string, data pulsar.M
 	zap.L().Log(level, "[Pulsar Consumer] "+message, zap.ByteString("message", b), zap.String("topic", consumer.key.Topic), zap.String("subscription", consumer.key.Subscription))
 }
 
-// getConsumer 获取 Consumer
+// getConsumer 获取 Consumer（使用 LoadOrStore 避免并发创建）
 func (bus *Pulbus) getConsumer(topic, subscription string, opts pulsar.ConsumerOptions) (*Consumer, error) {
 	key := ConsumerKey{Topic: topic, Subscription: subscription}
 
@@ -75,8 +75,13 @@ func (bus *Pulbus) getConsumer(topic, subscription string, opts pulsar.ConsumerO
 		return nil, err
 	}
 
-	// 存入缓存
-	bus.consumers.Store(key, consumer)
+	// 使用 LoadOrStore 原子操作，避免并发创建多个 consumer
+	actual, loaded := bus.consumers.LoadOrStore(key, consumer)
+	if loaded {
+		// 已存在其他 goroutine 创建的 consumer，关闭当前的
+		consumer.Close()
+		return actual.(*Consumer), nil
+	}
 
 	return consumer, nil
 }
