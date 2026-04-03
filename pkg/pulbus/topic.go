@@ -87,6 +87,11 @@ func ParseTopic(topic string) TopicConfig {
 	// 去除 persistent:// 前缀
 	topic = strings.TrimPrefix(topic, "persistent://")
 	topic = strings.TrimPrefix(topic, "non-persistent://")
+	topic = strings.TrimSpace(topic)
+
+	if topic == "" {
+		return config
+	}
 
 	parts := strings.Split(topic, "/")
 

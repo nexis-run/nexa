@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 type HTMLTemplate struct {
@@ -33,20 +34,33 @@ func (t *HTMLTemplate) Render(w io.Writer, name string, data interface{}, _ echo
 func LoadTemplates(tmpls embed.FS, templatesDir string) (ht *HTMLTemplate) {
 	ht = &HTMLTemplate{Templates: make(map[string]*template.Template)}
 
-	_ = fs.WalkDir(tmpls, templatesDir, func(path string, d fs.DirEntry, _ error) (err error) {
+	_ = fs.WalkDir(tmpls, templatesDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			zap.L().Error("遍历模板目录失败", zap.String("path", path), zap.Error(walkErr))
+			return nil
+		}
+
 		if d.IsDir() {
-			return
+			return nil
 		}
 
 		name := strings.Replace(path, templatesDir+"/", "", 1)
-		pt := template.New(name)
-		b, _ := tmpls.ReadFile(path)
 
-		_, _ = pt.Parse(string(b))
+		b, err := tmpls.ReadFile(path)
+		if err != nil {
+			zap.L().Error("读取模板文件失败", zap.String("path", path), zap.Error(err))
+			return nil
+		}
+
+		pt, err := template.New(name).Parse(string(b))
+		if err != nil {
+			zap.L().Error("解析模板失败", zap.String("name", name), zap.Error(err))
+			return nil
+		}
 
 		ht.Templates[name] = pt
 
-		return
+		return nil
 	})
 
 	return

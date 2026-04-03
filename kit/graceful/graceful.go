@@ -38,13 +38,15 @@ func Run(s Gracefully, opts ...Option) {
 	}
 
 	sig, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
 
 	// 启动服务
 	go s.Start()
 
 	// 当中断信号发生时，关闭服务器并返回
 	<-sig.Done()
+
+	// 收到信号后立即停止监听，避免第二次信号导致非预期行为
+	stop()
 
 	// 如果有设置超时时间，则使用该时间来优雅地关闭服务
 	ctx := context.Background()

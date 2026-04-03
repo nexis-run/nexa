@@ -45,9 +45,19 @@ func (r *Response) SetData(data any) *Response {
 	}
 
 	v := reflect.ValueOf(data)
-	if v.IsValid() && !v.IsZero() && !v.IsNil() {
-		r.Data = data
+	if !v.IsValid() || v.IsZero() {
+		return r
 	}
+
+	// IsNil 仅对 chan/func/interface/map/pointer/slice 有效，其他类型会 panic
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if v.IsNil() {
+			return r
+		}
+	}
+
+	r.Data = data
 
 	return r
 }
