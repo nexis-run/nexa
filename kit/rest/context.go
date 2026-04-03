@@ -71,6 +71,7 @@ func ContextBinding[T any](c echo.Context) (ctx *Context, req *T) {
 	ctx = GetContext(c)
 	req = new(T)
 	ctx.BindValidate(req)
+
 	return
 }
 

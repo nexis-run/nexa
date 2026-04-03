@@ -38,8 +38,10 @@ func Setup(cfg *configure.Logger) {
 	if cfg.Kafka != nil && len(cfg.Kafka.Brokers) > 0 && !cfg.Kafka.Disable {
 		// Kafka输出配置使用JSON格式 - 明确使用不同的配置
 		kafkaEncoderConfig := zap.NewProductionEncoderConfig()
+
 		kafkaEncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 		kafkaEncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+
 		kafkaEncoder := zapcore.NewJSONEncoder(kafkaEncoderConfig)
 		kafkaWriter := NewKafkaWriter(cfg.Kafka.Brokers, cfg.Kafka.Topic)
 

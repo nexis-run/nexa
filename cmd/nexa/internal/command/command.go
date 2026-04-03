@@ -17,6 +17,7 @@ func examples(ex ...string) string {
 	for i := range ex {
 		ex[i] = "  " + ex[i] // indent each row with 2 spaces.
 	}
+
 	return strings.Join(ex, "\n")
 }
 
@@ -27,5 +28,6 @@ func isUpperStartArgs(_ *cobra.Command, args []string) error {
 			return base.ErrNameMustStartWithUpper
 		}
 	}
+
 	return nil
 }

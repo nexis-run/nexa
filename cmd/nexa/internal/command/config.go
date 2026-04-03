@@ -49,6 +49,7 @@ func configInitCmd() *cobra.Command {
 			// 写入默认配置
 			defaultCfg := base.DefaultConfig()
 			fmt.Printf("默认配置:\n%s\n", defaultCfg)
+
 			err := os.WriteFile(p, []byte(defaultCfg), os.ModePerm)
 			if err != nil {
 				fmt.Printf("写入配置文件失败: %v\n", err)

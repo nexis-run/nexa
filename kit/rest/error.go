@@ -31,6 +31,7 @@ func NewError(code int, message string) *Error {
 	if err.Message == "" {
 		err.Message = http.StatusText(code)
 	}
+
 	return err
 }
 
@@ -38,7 +39,10 @@ func WrapError(code int, err error) *Error {
 	if err == nil {
 		return NewError(code, "")
 	}
+
 	e := NewError(code, err.Error())
+
 	e.Err = err
+
 	return e
 }

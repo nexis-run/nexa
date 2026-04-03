@@ -22,6 +22,7 @@ func TestPulbus(t *testing.T) {
 	require.NotNil(t, admin)
 
 	var policies *utils.RetentionPolicies
+
 	policies, err = admin.Namespaces().GetRetention(DefaultNamespace)
 	require.NoError(t, err)
 	fmt.Printf("Retention policies for namespace %s: %+v\n", DefaultNamespace, policies)
@@ -34,6 +35,7 @@ func TestConsume(t *testing.T) {
 	defer bus.client.Close()
 
 	var consumer pulsar.Consumer
+
 	consumer, err = bus.client.Subscribe(pulsar.ConsumerOptions{
 		Topic:            "test-Topic",
 		SubscriptionName: "test-sub",
@@ -42,6 +44,7 @@ func TestConsume(t *testing.T) {
 	require.NoError(t, err)
 
 	var msg pulsar.Message
+
 	msg, err = consumer.Receive(context.Background())
 	require.NoError(t, err)
 	fmt.Printf("Received message msgId: %#v -- content: '%s'\n", msg.ID(), string(msg.Payload()))

@@ -28,18 +28,21 @@ type Gen struct {
 // New 创建代码生成器
 func New() (gen *Gen, err error) {
 	gen = &Gen{}
+
 	gen.Config, err = base.GetConfig()
 	if err != nil {
 		return
 	}
 
 	gen.Module = gen.Config.GetModule()
+
 	return
 }
 
 // Generate 生成代码
 func (gen *Gen) Generate(pt PackageType, name string, force bool, setvars func(g *Gen, c *base.CommonTemplateVariables) any) (err error) {
 	var pkgPath string
+
 	switch pt {
 	case PackageDao:
 		pkgPath = gen.Config.DaoPath
@@ -59,12 +62,14 @@ func (gen *Gen) Generate(pt PackageType, name string, force bool, setvars func(g
 	})
 
 	var b []byte
+
 	b, err = RenderTemplate(string(pt)+".tmpl", vars)
 	if err != nil {
 		return
 	}
 
 	filename := filepath.Join(gen.Config.RootDir, pkgPath, strings.ToLower(name+".go"))
+
 	err = base.MkdirAll(filepath.Dir(filename))
 	if err != nil {
 		return

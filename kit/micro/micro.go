@@ -40,6 +40,7 @@ func Run(app, address string, h Handler, opts ...grpc.ServerOption) (server *grp
 
 	// 使用协程启动gRPC服务器
 	ch = make(chan error, 1)
+
 	go func() {
 		if err := server.Start(ctx); err != nil {
 			ch <- fmt.Errorf("gRPC 服务启动失败: %w", err)

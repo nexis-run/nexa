@@ -59,6 +59,7 @@ func newDaoCmd(force bool) (cmd *cobra.Command) {
 		Args: isUpperStartArgs,
 		RunE: func(_ *cobra.Command, names []string) (err error) {
 			var g *gen.Gen
+
 			g, err = gen.New()
 			if err != nil {
 				return
@@ -84,6 +85,7 @@ func newDaoCmd(force bool) (cmd *cobra.Command) {
 					diPath, _ := g.Config.GetDIPath()
 
 					var provider *parser.DaoProvider
+
 					provider, err = parser.NewDaoProvider(diPath, g.Config.DI.DaoStructName, g.Config.DI.DaoProviderSetVar, g.Config.GetDaoPkgPath())
 					if err != nil {
 						fmt.Printf("[DAO] DI 代码生成器初始化失败: %v\n", err)
@@ -125,13 +127,14 @@ func newEchoctxCmd(force bool) (cmd *cobra.Command) {
 		Args: isUpperStartArgs,
 		RunE: func(_ *cobra.Command, names []string) (err error) {
 			var g *gen.Gen
+
 			g, err = gen.New()
 			if err != nil {
 				return
 			}
 
 			for _, name := range names {
-				err = g.Generate(gen.PackageEchoctx, name, force, func(g *gen.Gen, c *base.CommonTemplateVariables) any {
+				err = g.Generate(gen.PackageEchoctx, name, force, func(_ *gen.Gen, c *base.CommonTemplateVariables) any {
 					return &base.EchoCtxTemplateVariables{
 						CommonTemplateVariables: c,
 						Name:                    name,

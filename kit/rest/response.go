@@ -64,11 +64,13 @@ func (r *Response) SetParams(params ...any) *Response {
 			r.SetCode(v.Code).SetMessage(v.Message)
 		case error:
 			message := v.Error()
+
 			var he *echo.HTTPError
 			if errors.As(v, &he) {
 				message = fmt.Sprintf("%v", he.Message)
 			}
 			r.SetMessage(message)
+
 			if r.Code == http.StatusOK {
 				r.SetCode(http.StatusBadRequest)
 			}

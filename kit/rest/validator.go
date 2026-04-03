@@ -56,9 +56,11 @@ func (v *Validator) RegisterValidation(tag string, message ...string) RegisterVa
 			v.trans,
 			func(ut ut.Translator) error {
 				text := "{0}验证失败"
+
 				if len(message) > 0 {
 					text = message[0]
 				}
+
 				return ut.Add(tag, text, true)
 			}, func(ut ut.Translator, fe validator.FieldError) string {
 				t, _ := ut.T(tag, fe.Field())

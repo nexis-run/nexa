@@ -13,5 +13,6 @@ func Bytes(src []byte) (str string) {
 			str += " "
 		}
 	}
+
 	return
 }

@@ -14,7 +14,8 @@ func SafeClose[T any](ch chan T) (justClosed bool) {
 	}()
 
 	// assume ch != nil here.
-	close(ch)   // panic if ch is closed
+	close(ch) // panic if ch is closed
+
 	return true // <=> justClosed = true; return
 }
 
@@ -25,6 +26,7 @@ func SafeSend[T any](ch chan T, value T) (closed bool) {
 		}
 	}()
 
-	ch <- value  // panic if ch is closed
+	ch <- value // panic if ch is closed
+
 	return false // <=> closed = false; return
 }

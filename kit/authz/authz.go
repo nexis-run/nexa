@@ -44,16 +44,19 @@ func Setup(address string, opts ...SetupOption) {
 		cfg := &setupConfig{
 			creds: insecure.NewCredentials(),
 		}
+
 		for _, opt := range opts {
 			opt(cfg)
 		}
 
 		var err error
+
 		conn, err = grpc.NewClient(address, grpc.WithTransportCredentials(cfg.creds))
 		if err != nil {
 			zap.L().Fatal("rbac rpc连接失败", zap.Error(err))
 			return
 		}
+
 		instance = rbac.NewRBACServiceClient(conn)
 	})()
 }
@@ -63,6 +66,7 @@ func Close() error {
 	if conn != nil {
 		return conn.Close()
 	}
+
 	return nil
 }
 
@@ -74,6 +78,7 @@ func GetRBACContext(ctx context.Context, token string) context.Context {
 // GetRestrictedUser 检查权限
 func GetRestrictedUser(ctx context.Context, token string, projectCode string, permissionKey string, opts ...Option) (*rbac.GetRestrictedUserResponse, error) {
 	o := defaultOption
+
 	for _, opt := range opts {
 		opt.apply(&o)
 	}
@@ -82,6 +87,7 @@ func GetRestrictedUser(ctx context.Context, token string, projectCode string, pe
 		PermissionKey: permissionKey,
 		ProjectCode:   rbac.GetProjectCode(projectCode),
 	})
+
 	if o.errorHandler != nil {
 		err = o.errorHandler(err)
 	}
@@ -92,6 +98,7 @@ func GetRestrictedUser(ctx context.Context, token string, projectCode string, pe
 // GetUser 获取用户信息
 func GetUser(ctx context.Context, uid string, opts ...Option) (*rbac.User, error) {
 	o := defaultOption
+
 	for _, opt := range opts {
 		opt.apply(&o)
 	}
@@ -99,6 +106,7 @@ func GetUser(ctx context.Context, uid string, opts ...Option) (*rbac.User, error
 	res, err := instance.GetUser(ctx, &rbac.GetUserRequest{
 		Uid: uid,
 	})
+
 	if o.errorHandler != nil {
 		err = o.errorHandler(err)
 	}

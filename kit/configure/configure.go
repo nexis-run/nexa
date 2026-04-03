@@ -20,8 +20,11 @@ import (
 func init() {
 	// 设置全局时区
 	tz := "Asia/Shanghai"
+
 	_ = os.Setenv("TZ", tz)
+
 	loc, _ := time.LoadLocation(tz)
+
 	time.Local = loc
 }
 
@@ -85,10 +88,12 @@ func (l *Logger) IsVaild() (vaild bool) {
 func Load[T Configurable](p string) (c T, err error) {
 	k := koanf.New(".")
 	f := file.Provider(p)
+
 	err = k.Load(f, yaml.Parser())
 	if err != nil {
 		return
 	}
+
 	err = k.UnmarshalWithConf(
 		"",
 		&c,
@@ -125,12 +130,14 @@ func Load[T Configurable](p string) (c T, err error) {
 // Sonyflake 创建sonyflake实例
 func (c Configure) Sonyflake() (*sonyflake.Sonyflake, error) {
 	id := 1103
+
 	switch c.Environment {
 	case kit.Production:
 		id = 1101
 	case kit.Development:
 		id = 1102
 	}
+
 	return sonyflake.New(sonyflake.Settings{
 		MachineID: func() (int, error) {
 			return id, nil

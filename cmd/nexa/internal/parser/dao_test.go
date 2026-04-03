@@ -17,6 +17,7 @@ func TestParseDIProvider(t *testing.T) {
 	dp.AddField("Agreement", "Brand", "City", "Manager", "System")
 
 	var b []byte
+
 	b, err = dp.Generate()
 	require.NoError(t, err)
 

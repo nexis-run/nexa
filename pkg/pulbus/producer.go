@@ -18,7 +18,7 @@ import (
 type ProducerOption func(*pulsar.ProducerMessage)
 
 // WithProducerKey 设置消息 Key
-// Key 的作用:
+// 的作用:
 // 1. 分区路由: 相同 Key 的消息发送到同一分区，保证顺序性
 // 2. 消息去重: 启用去重后，根据 Key 判断重复消息
 // 3. 压缩支持: Topic Compaction 时，相同 Key 只保留最新消息
@@ -84,6 +84,7 @@ func (bus *Pulbus) getProducer(topic string, opts pulsar.ProducerOptions) (pulsa
 
 	// 不存在则创建新的 producer
 	opts.Topic = topic
+
 	producer, err := bus.client.CreateProducer(opts)
 	if err != nil {
 		return nil, err
@@ -91,6 +92,7 @@ func (bus *Pulbus) getProducer(topic string, opts pulsar.ProducerOptions) (pulsa
 
 	// 存入缓存
 	bus.producers.Store(topic, producer)
+
 	return producer, nil
 }
 
@@ -114,6 +116,7 @@ func (bus *Pulbus) Send(ctx context.Context, topic string, messageOpts ...Produc
 	}
 
 	_, err = producer.Send(ctx, msg)
+
 	return err
 }
 

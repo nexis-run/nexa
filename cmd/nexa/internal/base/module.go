@@ -13,19 +13,19 @@ import (
 )
 
 // GetModule 获取模块信息
-func GetModule(dir string) (module string, err error) {
+func GetModule(dir string) (string, error) {
 	// 构造 go.mod 文件路径
 	goModPath := filepath.Join(dir, "go.mod")
 
 	// 读取文件内容
-	var data []byte
-	data, err = os.ReadFile(goModPath)
+	data, err := os.ReadFile(goModPath)
 	if err != nil {
 		return "", fmt.Errorf("go.mod 读取失败: %w", err)
 	}
 
 	// 解析 go.mod 文件
 	var modFile *modfile.File
+
 	modFile, err = modfile.Parse(goModPath, data, nil)
 	if err != nil {
 		return "", fmt.Errorf("go.mod 解析失败: %w", err)

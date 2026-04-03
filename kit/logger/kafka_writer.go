@@ -43,7 +43,9 @@ func (w *KafkaWriter) Write(p []byte) (n int, err error) {
 		_, _ = fmt.Fprintf(os.Stderr, "[KafkaWriter] 日志发送失败: %v\n", err)
 		return
 	}
+
 	n = len(p)
+
 	return
 }
 

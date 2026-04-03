@@ -78,14 +78,17 @@ func (w *Writer) SendMessages(ctx context.Context, messages ...kafka.Message) (e
 			time.Sleep(w.retryInterval)
 			continue
 		}
+
 		return
 	}
+
 	return
 }
 
 // writeMessagesWithTimeout 写入消息，带有超时控制
 func (w *Writer) writeMessagesWithTimeout(ctx context.Context, messages ...kafka.Message) (err error) {
 	var cancel context.CancelFunc
+
 	ctx, cancel = context.WithTimeout(ctx, w.timeout)
 	defer cancel()
 

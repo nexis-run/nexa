@@ -43,13 +43,13 @@ func RateLimitMiddleware(opts ...RateLimitOption) echo.MiddlewareFunc {
 			id := ctx.RealIP()
 			return id, nil
 		},
-		ErrorHandler: func(context echo.Context, err error) error {
+		ErrorHandler: func(_ echo.Context, _ error) error {
 			return &Error{
 				Code:    http.StatusTooManyRequests,
 				Message: "请求太频繁，请稍后再试",
 			}
 		},
-		DenyHandler: func(context echo.Context, identifier string, err error) error {
+		DenyHandler: func(_ echo.Context, _ string, _ error) error {
 			return &Error{
 				Code:    http.StatusTooManyRequests,
 				Message: "请求太频繁，请稍后再试",

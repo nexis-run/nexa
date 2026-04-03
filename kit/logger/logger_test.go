@@ -20,6 +20,7 @@ func TestLogger(t *testing.T) {
 	l.Named("xtest").Info("test")
 
 	var ld *zap.Logger
+
 	ld, err = zap.NewDevelopment()
 	require.NoError(t, err)
 	ld.Info("test")

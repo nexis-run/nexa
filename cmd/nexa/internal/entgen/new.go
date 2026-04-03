@@ -17,6 +17,7 @@ import (
 
 func (eng *EntGen) New(names []string) (err error) {
 	var target string
+
 	target, err = eng.cfg.GetEntPath()
 	if err != nil {
 		return
@@ -25,6 +26,7 @@ func (eng *EntGen) New(names []string) (err error) {
 	target = filepath.Join(target, "schema")
 
 	tmpl := template.New("schema").Funcs(gen.Funcs)
+
 	tmpl, err = tmpl.Parse(TemplateNewSchema)
 	if err != nil {
 		return
@@ -57,5 +59,5 @@ func (eng *EntGen) New(names []string) (err error) {
 		fmt.Printf("创建 %s 成功", name)
 	}
 
-	return nil
+	return
 }

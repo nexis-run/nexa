@@ -16,6 +16,7 @@ func NewAdmin(webServiceURL string, opts ...AdminOption) (*Admin, error) {
 	cfg := &pulsaradmin.Config{
 		WebServiceURL: webServiceURL,
 	}
+
 	for _, opt := range opts {
 		opt(cfg)
 	}

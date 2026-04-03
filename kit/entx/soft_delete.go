@@ -39,7 +39,6 @@ func (SoftDeleteMixin) Indexes() []ent.Index {
 func SoftDeleteInterceptor() ent.Interceptor {
 	return ent.InterceptFunc(func(next ent.Querier) ent.Querier {
 		return ent.QuerierFunc(func(ctx context.Context, q ent.Query) (ent.Value, error) {
-
 			selector, ok := q.(*sql.Selector)
 			if ok {
 				selector.Where(
@@ -56,7 +55,6 @@ func SoftDeleteInterceptor() ent.Interceptor {
 func SoftDeleteHook() ent.Hook {
 	return func(next ent.Mutator) ent.Mutator {
 		return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-
 			if m.Op().Is(ent.OpDelete | ent.OpDeleteOne) {
 				return nil, ErrHardDeleteForbidden
 			}

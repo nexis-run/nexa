@@ -157,15 +157,18 @@ func dump(handler DumpHandler) echo.MiddlewareFunc {
 		return func(c echo.Context) (err error) {
 			// Request
 			var reqBody []byte
+
 			if c.Request().Body != nil { // Read
 				reqBody, _ = io.ReadAll(c.Request().Body)
 			}
+
 			c.Request().Body = io.NopCloser(bytes.NewBuffer(reqBody)) // Reset
 
 			// Response
 			resBody := new(bytes.Buffer)
 			mw := io.MultiWriter(c.Response().Writer, resBody)
 			writer := &DumpResponseWriter{Writer: mw, ResponseWriter: c.Response().Writer}
+
 			c.Response().Writer = writer
 
 			err = next(c)
@@ -198,8 +201,10 @@ func getHeaders(headers http.Header, skipper HeaderSkipper) (strs []string) {
 		if skipper != nil && skipper(k) {
 			continue
 		}
+
 		strs = append(strs, k+" = "+headers.Get(k))
 	}
+
 	return
 }
 
@@ -245,7 +250,7 @@ func (mw *DumpZapLoggerMiddleware) WithConfig(cfg *DumpConfig) echo.MiddlewareFu
 		}
 
 		if cfg.ResponseBodySkipper == nil {
-			cfg.ResponseBodySkipper = func(c echo.Context) bool {
+			cfg.ResponseBodySkipper = func(_ echo.Context) bool {
 				return false
 			}
 		}

@@ -63,6 +63,7 @@ func defaultConfig() *Config {
 func DefaultConfig() string {
 	defaultCfg := defaultConfig()
 	b, _ := yaml.Marshal(defaultCfg)
+
 	return string(b)
 }
 
@@ -77,12 +78,12 @@ func loadConfig(cfgPath string) (*Config, error) {
 			return c, nil
 		}
 
-		return nil, fmt.Errorf("配置文件读取失败: %v\n", err)
+		return nil, fmt.Errorf("配置文件读取失败: %v", err)
 	}
 
 	err = yaml.Unmarshal(b, c)
 	if err != nil {
-		return nil, fmt.Errorf("配置文件解析失败: %v\n", err)
+		return nil, fmt.Errorf("配置文件解析失败: %v", err)
 	}
 
 	return c, nil
@@ -91,6 +92,7 @@ func loadConfig(cfgPath string) (*Config, error) {
 // InitializeConfig 初始化配置文件，如果配置文件不存在，则使用默认配置
 func InitializeConfig(cfgPath string) (err error) {
 	var value *Config
+
 	value, err = loadConfig(cfgPath)
 	if err != nil {
 		return
@@ -121,6 +123,7 @@ func GetConfig() (*Config, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("配置未初始化，请先调用 InitializeConfig")
 	}
+
 	return cfg, nil
 }
 

@@ -32,6 +32,7 @@ func Run(s Gracefully, opts ...Option) {
 	o := &option{
 		timeout: 30 * time.Second, // 默认超时时间为30秒
 	}
+
 	for _, opt := range opts {
 		opt.apply(o)
 	}
@@ -47,8 +48,10 @@ func Run(s Gracefully, opts ...Option) {
 
 	// 如果有设置超时时间，则使用该时间来优雅地关闭服务
 	ctx := context.Background()
+
 	if o.timeout > 0 {
 		var cancel context.CancelFunc
+
 		ctx, cancel = context.WithTimeout(ctx, o.timeout)
 		defer cancel()
 	}

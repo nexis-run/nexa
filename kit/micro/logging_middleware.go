@@ -50,6 +50,7 @@ func LoggingMiddleware() middleware.Middleware {
 			// 处理错误信息
 			if err != nil {
 				se := status.Convert(err)
+
 				code = int32(se.Code())
 				reason = se.Message()
 			} else {

@@ -36,12 +36,15 @@ func createDir(target string) error {
 	if err == nil || !os.IsNotExist(err) {
 		return err
 	}
+
 	if err = os.MkdirAll(target, os.ModePerm); err != nil {
 		return fmt.Errorf("文件夹创建失败: %w", err)
 	}
+
 	if err = os.WriteFile(filepath.Join(target, "generate.go"), []byte(genFile), 0644); err != nil {
 		return fmt.Errorf("创建 generate.go 文件失败: %w", err)
 	}
+
 	return nil
 }
 

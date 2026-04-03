@@ -37,10 +37,10 @@ func WithAdmin(webServiceURL string, opts ...AdminOption) Option {
 
 func New(bookie string, opts ...Option) (bus *Pulbus, err error) {
 	var client pulsar.Client
+
 	client, err = pulsar.NewClient(pulsar.ClientOptions{
 		URL: bookie,
 	})
-
 	if err != nil {
 		return
 	}
@@ -56,7 +56,7 @@ func New(bookie string, opts ...Option) (bus *Pulbus, err error) {
 		opt(bus)
 	}
 
-	return bus, nil
+	return
 }
 
 // Close 关闭所有 producers、consumers 和 client
@@ -68,6 +68,7 @@ func (bus *Pulbus) Close() {
 			producer.Close()
 		}
 		bus.producers.Delete(key)
+
 		return true
 	})
 
@@ -78,6 +79,7 @@ func (bus *Pulbus) Close() {
 			consumer.Close()
 		}
 		bus.consumers.Delete(key)
+
 		return true
 	})
 

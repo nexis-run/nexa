@@ -60,5 +60,6 @@ func PointerConditionBool[T comparable](p *T, yes T) *bool {
 	if p == nil {
 		return nil
 	}
+
 	return Bool(*p == yes)
 }

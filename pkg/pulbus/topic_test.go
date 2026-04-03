@@ -14,12 +14,15 @@ func TestDefaultTopicConfig(t *testing.T) {
 	if config.Tenant != "public" {
 		t.Errorf("Expected tenant 'public', got '%s'", config.Tenant)
 	}
+
 	if config.Namespace != "default" {
 		t.Errorf("Expected namespace 'default', got '%s'", config.Namespace)
 	}
+
 	if config.Topic != "orders" {
 		t.Errorf("Expected topic 'orders', got '%s'", config.Topic)
 	}
+
 	if config.Partition != -1 {
 		t.Errorf("Expected partition -1, got %d", config.Partition)
 	}
@@ -192,12 +195,15 @@ func TestParseTopic(t *testing.T) {
 			if result.Tenant != tt.expected.Tenant {
 				t.Errorf("Tenant: expected '%s', got '%s'", tt.expected.Tenant, result.Tenant)
 			}
+
 			if result.Namespace != tt.expected.Namespace {
 				t.Errorf("Namespace: expected '%s', got '%s'", tt.expected.Namespace, result.Namespace)
 			}
+
 			if result.Topic != tt.expected.Topic {
 				t.Errorf("Topic: expected '%s', got '%s'", tt.expected.Topic, result.Topic)
 			}
+
 			if result.Partition != tt.expected.Partition {
 				t.Errorf("Partition: expected %d, got %d", tt.expected.Partition, result.Partition)
 			}
@@ -210,6 +216,7 @@ func TestTopicBuilder(t *testing.T) {
 
 	t.Run("Build", func(t *testing.T) {
 		expected := "persistent://production/app/orders"
+
 		result := builder.Build("orders")
 		if result != expected {
 			t.Errorf("Expected '%s', got '%s'", expected, result)
@@ -218,6 +225,7 @@ func TestTopicBuilder(t *testing.T) {
 
 	t.Run("BuildPartitioned", func(t *testing.T) {
 		expected := "persistent://production/app/orders-partition-3"
+
 		result := builder.BuildPartitioned("orders", 3)
 		if result != expected {
 			t.Errorf("Expected '%s', got '%s'", expected, result)
@@ -226,6 +234,7 @@ func TestTopicBuilder(t *testing.T) {
 
 	t.Run("Namespace", func(t *testing.T) {
 		expected := "production/app"
+
 		result := builder.Namespace()
 		if result != expected {
 			t.Errorf("Expected '%s', got '%s'", expected, result)
@@ -239,11 +248,13 @@ func TestNamespaceConfig(t *testing.T) {
 	if ns.Tenant != "production" {
 		t.Errorf("Expected tenant 'production', got '%s'", ns.Tenant)
 	}
+
 	if ns.Namespace != "app" {
 		t.Errorf("Expected namespace 'app', got '%s'", ns.Namespace)
 	}
 
 	expected := "production/app"
+
 	result := ns.FullName()
 	if result != expected {
 		t.Errorf("Expected '%s', got '%s'", expected, result)

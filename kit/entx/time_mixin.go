@@ -24,10 +24,12 @@ type TimeMixin struct {
 func (t TimeMixin) Fields() []ent.Field {
 	creator := field.Time("created_at").Immutable()
 	updator := field.Time("updated_at")
+
 	if t.Optional {
 		creator.Optional().Nillable()
 		updator.Optional().Nillable()
 	}
+
 	return []ent.Field{
 		creator.Default(time.Now),
 		updator.Default(time.Now).UpdateDefault(time.Now),
@@ -38,5 +40,6 @@ func (t TimeMixin) Indexes() (indexes []ent.Index) {
 	if !t.DisableIndex {
 		indexes = append(indexes, index.Fields("created_at"), index.Fields("updated_at"))
 	}
+
 	return
 }

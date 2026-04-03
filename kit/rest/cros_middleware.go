@@ -64,8 +64,10 @@ func CORSMiddlware(options ...CORSOption) echo.MiddlewareFunc {
 	cors := &CORS{
 		config: corsConfig,
 	}
+
 	for _, option := range options {
 		option.apply(cors)
 	}
+
 	return middleware.CORSWithConfig(cors.config)
 }

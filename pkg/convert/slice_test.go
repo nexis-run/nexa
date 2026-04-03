@@ -27,6 +27,7 @@ func BenchmarkReverse(b *testing.B) {
 		s[i] = i
 	}
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		_ = Reverse(s)
 	}

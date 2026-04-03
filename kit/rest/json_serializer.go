@@ -22,9 +22,11 @@ func NewDefaultJSONSerializer() *DefaultJSONSerializer {
 // You can optionally use the indent parameter to produce pretty JSONs.
 func (d DefaultJSONSerializer) Serialize(c echo.Context, i any, indent string) error {
 	enc := sonic.ConfigDefault.NewEncoder(c.Response())
+
 	if indent != "" {
 		enc.SetIndent("", indent)
 	}
+
 	return enc.Encode(i)
 }
 

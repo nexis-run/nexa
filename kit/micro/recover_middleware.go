@@ -19,10 +19,12 @@ func RecoverMiddleware() middleware.Middleware {
 				if r := recover(); r != nil {
 					buf := make([]byte, 64<<10) //nolint:mnd
 					n := runtime.Stack(buf, false)
+
 					buf = buf[:n]
 					zap.L().Error("捕获gRPC未处理崩溃", zap.Reflect("request", req), zap.Any("panic", r), zap.String("stack", string(buf)))
 				}
 			}()
+
 			return handler(ctx, req)
 		}
 	}

@@ -8,6 +8,7 @@ func Or[T any](condition bool, yes T, no T) T {
 	if condition {
 		return yes
 	}
+
 	return no
 }
 
@@ -15,5 +16,6 @@ func OrFunc[T any](condition func() bool, yes func() T, no func() T) T {
 	if condition() {
 		return yes()
 	}
+
 	return no()
 }

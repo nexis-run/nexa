@@ -17,6 +17,7 @@ func (e Environment) IsValid() bool {
 	case Production, Staging, Development:
 		return true
 	}
+
 	return false
 }
 

@@ -26,6 +26,7 @@ func BenchmarkBuffer(b *testing.B) {
 
 		for i := 0; i < 1000; i++ {
 			wg.Add(1)
+
 			go func(wg *sync.WaitGroup) {
 				defer wg.Done()
 
@@ -38,6 +39,7 @@ func BenchmarkBuffer(b *testing.B) {
 
 func BenchmarkBufferPool(b *testing.B) {
 	b.ReportAllocs()
+
 	for n := 0; n < b.N; n++ {
 		wg := &sync.WaitGroup{}
 

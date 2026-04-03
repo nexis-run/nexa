@@ -35,6 +35,7 @@ func GetPkgPath(module, root, path string) string {
 
 	rel, _ := filepath.Rel(adir, apath)
 	result := filepath.ToSlash(filepath.Join(module, rel))
+
 	return result
 }
 
@@ -43,5 +44,6 @@ func MkdirAll(path string) error {
 	if os.IsNotExist(err) {
 		return os.MkdirAll(path, os.ModePerm)
 	}
+
 	return nil
 }

@@ -18,6 +18,7 @@ var (
 // RenderTemplate 渲染模板
 func RenderTemplate(templateName string, data any) (b []byte, err error) {
 	var tmpl []byte
+
 	tmpl, err = templateFS.ReadFile("template/" + templateName)
 	if err != nil {
 		return
@@ -25,6 +26,7 @@ func RenderTemplate(templateName string, data any) (b []byte, err error) {
 
 	// 创建模板并解析
 	var t *template.Template
+
 	t, err = template.New(templateName).Parse(string(tmpl))
 	if err != nil {
 		return
@@ -36,5 +38,7 @@ func RenderTemplate(templateName string, data any) (b []byte, err error) {
 		return
 	}
 
-	return buf.Bytes(), nil
+	b = buf.Bytes()
+
+	return
 }

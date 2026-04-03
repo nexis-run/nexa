@@ -6,6 +6,12 @@ package micro
 
 import "context"
 
+type ContextKey string
+
+const (
+	ContextKeyApp ContextKey = "app"
+)
+
 type Context struct {
 	context.Context
 
@@ -14,7 +20,7 @@ type Context struct {
 
 func NewContext(app string) *Context {
 	return &Context{
-		Context: context.WithValue(context.Background(), "app", app),
+		Context: context.WithValue(context.Background(), ContextKeyApp, app),
 		App:     app,
 	}
 }

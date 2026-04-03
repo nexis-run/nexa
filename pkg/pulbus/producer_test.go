@@ -28,6 +28,7 @@ func TestProducerOptions(t *testing.T) {
 	}
 
 	msg := &pulsar.ProducerMessage{}
+
 	for _, opt := range opts {
 		opt(msg)
 	}

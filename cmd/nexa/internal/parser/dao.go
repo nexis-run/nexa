@@ -45,10 +45,12 @@ func NewDaoProvider(diPath, typeName, variableName, importPath string) (*DaoProv
 
 	// 使用正则提取现有的 Dao 结构体字段
 	structPattern := regexp.MustCompile(`(?s)type\s+` + typeName + `\s+struct\s*\{([^}]*)\}`)
+
 	matches := structPattern.FindSubmatch(content)
-	if matches != nil && len(matches) > 1 {
+	if len(matches) > 1 {
 		// 提取字段
 		fieldPattern := regexp.MustCompile(`(\w+)\s+\*dao\.(\w+)Dao`)
+
 		fieldMatches := fieldPattern.FindAllSubmatch(matches[1], -1)
 		for _, fm := range fieldMatches {
 			if len(fm) > 1 {
@@ -69,6 +71,7 @@ func (dp *DaoProvider) AddField(fields ...string) {
 	dp.fields = append(dp.fields, fields...)
 	// 去重
 	fieldSet := make(map[string]struct{})
+
 	uniqueFields := make([]string, 0, len(dp.fields))
 	for _, f := range dp.fields {
 		if _, exists := fieldSet[f]; !exists {
@@ -76,6 +79,7 @@ func (dp *DaoProvider) AddField(fields ...string) {
 			uniqueFields = append(uniqueFields, f)
 		}
 	}
+
 	dp.fields = uniqueFields
 
 	// 排序
@@ -120,6 +124,7 @@ func (dp *DaoProvider) WriteToFile() error {
 func (dp *DaoProvider) hasImport(content string) bool {
 	// 匹配 import 中是否有目标路径
 	pattern := regexp.MustCompile(`(?s)import\s*\((.*?)\)`)
+
 	matches := pattern.FindStringSubmatch(content)
 	if len(matches) > 1 {
 		return strings.Contains(matches[1], dp.importPath)
@@ -127,6 +132,7 @@ func (dp *DaoProvider) hasImport(content string) bool {
 
 	// 单行 import
 	singlePattern := regexp.MustCompile(`import\s+"` + regexp.QuoteMeta(dp.importPath) + `"`)
+
 	return singlePattern.MatchString(content)
 }
 
@@ -143,14 +149,17 @@ func (dp *DaoProvider) addImport(content string) string {
 				if imports != "" {
 					return parts[1] + imports + "\n\t\"" + dp.importPath + "\"\n" + parts[3]
 				}
+
 				return parts[1] + "\"" + dp.importPath + "\"\n" + parts[3]
 			}
+
 			return match
 		})
 	}
 
 	// 没有 import 块，在 package 后添加
 	packagePattern := regexp.MustCompile(`(package\s+\w+)`)
+
 	return packagePattern.ReplaceAllString(content, "$1\n\nimport (\n\t\""+dp.importPath+"\"\n)")
 }
 
@@ -161,6 +170,7 @@ func (dp *DaoProvider) replaceStruct(content string) string {
 	// 使用智能括号匹配来处理结构体定义
 	// 首先找到 type Xxx struct { 的位置
 	typePattern := regexp.MustCompile(`type\s+` + regexp.QuoteMeta(dp.typeName) + `\s+struct\s*\{`)
+
 	loc := typePattern.FindStringIndex(content)
 	if loc == nil {
 		return content
@@ -172,11 +182,13 @@ func (dp *DaoProvider) replaceStruct(content string) string {
 	end := start + 1
 
 	for end < len(content) && depth > 0 {
-		if content[end] == '{' {
+		switch content[end] {
+		case '{':
 			depth++
-		} else if content[end] == '}' {
+		case '}':
 			depth--
 		}
+
 		end++
 	}
 
@@ -196,6 +208,7 @@ func (dp *DaoProvider) replaceProviderSet(content string) string {
 	// 使用更智能的方法匹配嵌套括号
 	// 首先找到 var xxx = wire.NewSet( 的位置
 	varPattern := regexp.MustCompile(`var\s+` + regexp.QuoteMeta(dp.variableName) + `\s*=\s*wire\.NewSet\(`)
+
 	loc := varPattern.FindStringIndex(content)
 	if loc == nil {
 		return content
@@ -207,11 +220,13 @@ func (dp *DaoProvider) replaceProviderSet(content string) string {
 	end := start + 1
 
 	for end < len(content) && depth > 0 {
-		if content[end] == '(' {
+		switch content[end] {
+		case '(':
 			depth++
-		} else if content[end] == ')' {
+		case ')':
 			depth--
 		}
+
 		end++
 	}
 
@@ -228,10 +243,12 @@ func (dp *DaoProvider) replaceProviderSet(content string) string {
 func (dp *DaoProvider) buildDaoStruct() string {
 	var buf bytes.Buffer
 	buf.WriteString("Dao struct {\n")
+
 	for _, field := range dp.fields {
 		_, _ = fmt.Fprintf(&buf, "\t%s *dao.%sDao\n", field, field)
 	}
 	buf.WriteString("}")
+
 	return buf.String()
 }
 
@@ -239,9 +256,11 @@ func (dp *DaoProvider) buildDaoStruct() string {
 func (dp *DaoProvider) buildProviderSetCall() string {
 	var buf bytes.Buffer
 	buf.WriteString("wire.NewSet(\n")
+
 	for _, field := range dp.fields {
 		_, _ = fmt.Fprintf(&buf, "\tdao.New%s,\n", field)
 	}
 	buf.WriteString("\n\twire.Struct(new(Dao), \"*\"),\n)")
+
 	return buf.String()
 }

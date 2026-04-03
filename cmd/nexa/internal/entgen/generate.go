@@ -43,10 +43,13 @@ func (g *GenerateExtension) Options() []entc.Option {
 func (eng *EntGen) Generate() error {
 	// 特性列表
 	fm := make(map[string]struct{})
+
 	for _, feat := range append(defaultFeats, eng.cfg.EntFeatures...) {
 		fm[feat] = struct{}{}
 	}
+
 	var features []string
+
 	for feat := range fm {
 		features = append(features, feat)
 	}

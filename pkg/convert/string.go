@@ -24,8 +24,10 @@ func StringsToUint64(vals []string) []uint64 {
 		if !ok {
 			continue
 		}
+
 		data = append(data, u)
 	}
+
 	return data
 }
 
@@ -35,6 +37,7 @@ func Uint64sToInterfaces(vals []uint64) []any {
 	for i, v := range vals {
 		result[i] = v
 	}
+
 	return result
 }
 
@@ -43,12 +46,16 @@ func StringToUint64(s string) (uint64, bool) {
 	if len(s) == 0 {
 		return 0, false
 	}
+
 	var n uint64
+
 	for _, ch := range []byte(s) {
 		if ch < '0' || ch > '9' {
 			return 0, false
 		}
+
 		n = n*10 + uint64(ch-'0')
 	}
+
 	return n, true
 }

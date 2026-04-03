@@ -69,6 +69,7 @@ func (bus *Pulbus) getConsumer(topic, subscription string, opts pulsar.ConsumerO
 	opts.SubscriptionName = subscription
 
 	var err error
+
 	consumer.Consumer, err = bus.client.Subscribe(opts)
 	if err != nil {
 		return nil, err
@@ -76,6 +77,7 @@ func (bus *Pulbus) getConsumer(topic, subscription string, opts pulsar.ConsumerO
 
 	// 存入缓存
 	bus.consumers.Store(key, consumer)
+
 	return consumer, nil
 }
 
@@ -87,6 +89,7 @@ func (consumer *Consumer) handleMessage(msg pulsar.Message, handler MessageHandl
 		// 处理失败，nack 消息
 		consumer.Nack(msg)
 		consumer.log(zapcore.WarnLevel, "消息处理失败，Nack 消息", msg)
+
 		return
 	}
 
@@ -95,7 +98,6 @@ func (consumer *Consumer) handleMessage(msg pulsar.Message, handler MessageHandl
 	if err != nil {
 		consumer.log(zapcore.WarnLevel, "Ack 失败", msg)
 	}
-	return
 }
 
 // ConsumeWithLoop 阻塞消费消息
@@ -110,6 +112,7 @@ func (bus *Pulbus) ConsumeWithLoop(ctx context.Context, topic, subscription stri
 
 	// 持续接收消息
 	var msg pulsar.Message
+
 	for {
 		msg, err = consumer.Receive(ctx)
 		if err != nil {

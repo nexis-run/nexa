@@ -49,6 +49,7 @@ func (tc TopicConfig) FullName() string {
 		return fmt.Sprintf("persistent://%s/%s/%s-partition-%d",
 			tc.Tenant, tc.Namespace, tc.Topic, tc.Partition)
 	}
+
 	return fmt.Sprintf("persistent://%s/%s/%s",
 		tc.Tenant, tc.Namespace, tc.Topic)
 }
@@ -60,6 +61,7 @@ func (tc TopicConfig) ShortName() string {
 		return fmt.Sprintf("%s/%s/%s-partition-%d",
 			tc.Tenant, tc.Namespace, tc.Topic, tc.Partition)
 	}
+
 	return fmt.Sprintf("%s/%s/%s",
 		tc.Tenant, tc.Namespace, tc.Topic)
 }

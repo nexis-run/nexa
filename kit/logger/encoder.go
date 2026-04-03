@@ -11,6 +11,7 @@ import (
 
 func ConsoleEncoder() zapcore.Encoder {
 	config := zap.NewDevelopmentEncoderConfig()
+
 	config.EncodeTime = zapcore.ISO8601TimeEncoder
 	config.EncodeLevel = func(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 		s, ok := levelToCapitalColorString[l]
