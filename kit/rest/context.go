@@ -44,17 +44,26 @@ func GetContext(c echo.Context) *Context {
 	}
 }
 
-// BindValidate 绑定并校验
+// BindValidate 绑定并校验（失败时 panic，需配合 RecoverMiddleware 使用）
 func (c *Context) BindValidate(ptr any) {
+	if err := c.BindAndValidate(ptr); err != nil {
+		panic(err)
+	}
+}
+
+// BindAndValidate 绑定并校验，返回 error 而非 panic
+func (c *Context) BindAndValidate(ptr any) error {
 	err := c.Bind(ptr)
 	if err != nil {
-		panic(NewError(http.StatusBadRequest, err.Error()))
+		return NewError(http.StatusBadRequest, err.Error())
 	}
 
 	err = c.Validate(ptr)
 	if err != nil {
-		panic(NewError(http.StatusBadRequest, err.Error()))
+		return NewError(http.StatusBadRequest, err.Error())
 	}
+
+	return nil
 }
 
 // ContextBinding 获取上下文并绑定参数，返回 Context

@@ -95,17 +95,24 @@ func RBACMiddleware(opts ...RBACMiddlewareOption) echo.MiddlewareFunc {
 			)
 
 			// 获取用户信息和权限
-			if cfg.EnableRemoteAuth && token != "" && projectCode != "" && permissionKey != "" {
-				authed, err := authz.GetRestrictedUser(c.Request().Context(), token, projectCode, permissionKey)
-				if err != nil {
-					return err
-				}
+			if cfg.EnableRemoteAuth {
+				// 启用远程验证时，token 为必需字段
+				if token == "" {
+					if !skip {
+						return WrapError(http.StatusUnauthorized, authz.ErrUnauthorized)
+					}
+				} else {
+					authed, err := authz.GetRestrictedUser(c.Request().Context(), token, projectCode, permissionKey)
+					if err != nil {
+						return err
+					}
 
-				user = authed.UserInfo
-				hasPermission = authed.HasPermission
+					user = authed.UserInfo
+					hasPermission = authed.HasPermission
+				}
 			}
 
-			// 如果未使用远程验证且配置了静态用户信息
+			// 如果未使用远程验证且配置了静态用户信息（仅用于开发/测试环境）
 			if !cfg.EnableRemoteAuth && cfg.StaticUser != nil {
 				user = cfg.StaticUser
 				hasPermission = true

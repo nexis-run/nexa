@@ -60,26 +60,29 @@ func New(bookie string, opts ...Option) (bus *Pulbus, err error) {
 }
 
 // Close 关闭所有 producers、consumers 和 client
-func (bus *Pulbus) Close() error {
+func (bus *Pulbus) Close() {
 	// 关闭所有 producers
 	bus.producers.Range(func(key, value interface{}) bool {
 		if producer, ok := value.(pulsar.Producer); ok {
+			zap.L().Info("[Pulsar] 关闭 Producer", zap.String("topic", producer.Topic()))
 			producer.Close()
 		}
+		bus.producers.Delete(key)
 		return true
 	})
 
 	// 关闭所有 consumers
 	bus.consumers.Range(func(key, value interface{}) bool {
-		if consumer, ok := value.(pulsar.Consumer); ok {
+		if consumer, ok := value.(*Consumer); ok {
+			zap.L().Info("[Pulsar] 关闭 Consumer", zap.String("topic", consumer.key.Topic), zap.String("subscription", consumer.key.Subscription))
 			consumer.Close()
 		}
+		bus.consumers.Delete(key)
 		return true
 	})
 
 	// 关闭 client
 	bus.client.Close()
-	return nil
 }
 
 // GetAdmin 获取 Pulsar Admin 客户端

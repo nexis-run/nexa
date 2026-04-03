@@ -141,6 +141,12 @@ func (bus *Pulbus) Consume(ctx context.Context, topic, subscription string, hand
 		return err
 	}
 
+	// ctx 取消时关闭 consumer 并从缓存中移除，避免 goroutine 和 channel 泄露
+	defer func() {
+		consumer.Close()
+		bus.consumers.Delete(consumer.key)
+	}()
+
 	// 从 channel 读取消息
 	for {
 		select {

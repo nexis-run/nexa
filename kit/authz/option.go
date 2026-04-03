@@ -23,12 +23,12 @@ var defaultOption = option{
 }
 
 type Option interface {
-	apply(option)
+	apply(*option)
 }
 
-type optionFunc func(option)
+type optionFunc func(*option)
 
-func (f optionFunc) apply(c option) {
+func (f optionFunc) apply(c *option) {
 	f(c)
 }
 
@@ -36,7 +36,7 @@ var _ = WithErrorHandler
 
 // WithErrorHandler 设置错误处理
 func WithErrorHandler(f func(err error) error) Option {
-	return optionFunc(func(c option) {
+	return optionFunc(func(c *option) {
 		c.errorHandler = f
 	})
 }

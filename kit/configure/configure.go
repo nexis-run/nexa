@@ -70,7 +70,7 @@ func (l *Logger) IsVaild() (vaild bool) {
 	}
 
 	// 如果没有配置 stdout 和 kafka / kafka未启用，则无效
-	if !l.Stdout && l.Kafka == nil && l.Kafka.Disable {
+	if !l.Stdout && (l.Kafka == nil || l.Kafka.Disable) {
 		return
 	}
 

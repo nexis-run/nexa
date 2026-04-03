@@ -108,8 +108,8 @@ func (bus *Pulbus) Send(ctx context.Context, topic string, messageOpts ...Produc
 		opt(msg)
 	}
 
-	// 判定消息内容是否为空
-	if msg.Payload == nil || msg.Value == nil {
+	// 判定消息内容是否为空（Payload 和 Value 至少需要一个）
+	if msg.Payload == nil && msg.Value == nil {
 		return errors.New("消息内容不能为空")
 	}
 

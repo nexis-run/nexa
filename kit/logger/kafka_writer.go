@@ -6,11 +6,16 @@ package logger
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"time"
 
 	"github.com/segmentio/kafka-go"
 
 	"nexis.run/nexa/pkg/clara"
 )
+
+const kafkaWriteTimeout = 10 * time.Second
 
 type KafkaWriter struct {
 	*clara.Writer
@@ -27,10 +32,15 @@ func (w *KafkaWriter) Write(p []byte) (n int, err error) {
 	safeCopy := make([]byte, len(p))
 	copy(safeCopy, p)
 
-	err = w.SendMessages(context.Background(), kafka.Message{
+	ctx, cancel := context.WithTimeout(context.Background(), kafkaWriteTimeout)
+	defer cancel()
+
+	err = w.SendMessages(ctx, kafka.Message{
 		Value: safeCopy,
 	})
 	if err != nil {
+		// 日志发送失败时输出到 stderr，避免关键日志静默丢失
+		_, _ = fmt.Fprintf(os.Stderr, "[KafkaWriter] 日志发送失败: %v\n", err)
 		return
 	}
 	n = len(p)
