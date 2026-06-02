@@ -13,6 +13,10 @@ import (
 )
 
 func StringIsUpperStart(name string) bool {
+	if name == "" {
+		return false
+	}
+
 	return unicode.IsUpper(rune(name[0]))
 }
 

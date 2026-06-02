@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	instance rbac.RBACServiceClient
-	conn     *grpc.ClientConn
+	instance  rbac.RBACServiceClient
+	conn      *grpc.ClientConn
+	setupOnce sync.Once
 )
 
 var _ = Setup
@@ -40,7 +41,7 @@ func WithTransportCredentials(creds credentials.TransportCredentials) SetupOptio
 // Setup 初始化 rbac gRPC 客户端
 // 如果初始化失败, 会直接抛出致命错误
 func Setup(address string, opts ...SetupOption) {
-	sync.OnceFunc(func() {
+	setupOnce.Do(func() {
 		cfg := &setupConfig{
 			creds: insecure.NewCredentials(),
 		}
@@ -58,7 +59,7 @@ func Setup(address string, opts ...SetupOption) {
 		}
 
 		instance = rbac.NewRBACServiceClient(conn)
-	})()
+	})
 }
 
 // Close 关闭 gRPC 连接

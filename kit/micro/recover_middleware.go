@@ -6,6 +6,7 @@ package micro
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 
 	"github.com/go-kratos/kratos/v2/middleware"
@@ -22,6 +23,9 @@ func RecoverMiddleware() middleware.Middleware {
 
 					buf = buf[:n]
 					zap.L().Error("捕获gRPC未处理崩溃", zap.Reflect("request", req), zap.Any("panic", r), zap.String("stack", string(buf)))
+
+					// 将 panic 转为 error 返回, 避免调用方收到 (nil, nil) 误判成功
+					err = fmt.Errorf("panic recovered: %v", r)
 				}
 			}()
 

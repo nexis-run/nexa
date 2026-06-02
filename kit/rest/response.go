@@ -39,13 +39,14 @@ func (r *Response) SetMessage(message string) *Response {
 }
 
 // SetData 设置data
+// 仅过滤 nil 值, 数值零值 / 空串 / 空 struct 等有效零值原样保留
 func (r *Response) SetData(data any) *Response {
 	if data == nil {
 		return r
 	}
 
 	v := reflect.ValueOf(data)
-	if !v.IsValid() || v.IsZero() {
+	if !v.IsValid() {
 		return r
 	}
 

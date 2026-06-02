@@ -242,7 +242,7 @@ func (dp *DaoProvider) replaceProviderSet(content string) string {
 // buildDaoStruct 构建 Dao 结构体定义
 func (dp *DaoProvider) buildDaoStruct() string {
 	var buf bytes.Buffer
-	buf.WriteString("Dao struct {\n")
+	_, _ = fmt.Fprintf(&buf, "%s struct {\n", dp.typeName)
 
 	for _, field := range dp.fields {
 		_, _ = fmt.Fprintf(&buf, "\t%s *dao.%sDao\n", field, field)
@@ -260,7 +260,8 @@ func (dp *DaoProvider) buildProviderSetCall() string {
 	for _, field := range dp.fields {
 		_, _ = fmt.Fprintf(&buf, "\tdao.New%s,\n", field)
 	}
-	buf.WriteString("\n\twire.Struct(new(Dao), \"*\"),\n)")
+
+	_, _ = fmt.Fprintf(&buf, "\n\twire.Struct(new(%s), \"*\"),\n)", dp.typeName)
 
 	return buf.String()
 }

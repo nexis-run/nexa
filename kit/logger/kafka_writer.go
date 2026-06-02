@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -15,38 +16,62 @@ import (
 	"nexis.run/nexa/pkg/clara"
 )
 
-const kafkaWriteTimeout = 10 * time.Second
+const (
+	kafkaWriteTimeout = 10 * time.Second
+	kafkaChanBuffer   = 4096 // 异步队列容量, 满后采用丢弃策略避免业务侧阻塞
+)
 
 type KafkaWriter struct {
 	*clara.Writer
+
+	ch         chan []byte
+	droppedCnt atomic.Uint64 // 队列满导致丢弃的日志条数
 }
 
 func NewKafkaWriter(brokers []string, topic string) *KafkaWriter {
-	return &KafkaWriter{
+	w := &KafkaWriter{
 		Writer: clara.NewWriter(brokers, topic),
+		ch:     make(chan []byte, kafkaChanBuffer),
 	}
+
+	go w.loop()
+
+	return w
 }
 
+// Write 投递日志到异步发送队列, 队列满时直接丢弃, 避免阻塞业务路径
 func (w *KafkaWriter) Write(p []byte) (n int, err error) {
-	// 创建一个副本以避免数据竞争
+	// 必须 copy, zap 复用同一份底层缓冲
 	safeCopy := make([]byte, len(p))
 	copy(safeCopy, p)
 
-	ctx, cancel := context.WithTimeout(context.Background(), kafkaWriteTimeout)
-	defer cancel()
+	select {
+	case w.ch <- safeCopy:
+	default:
+		dropped := w.droppedCnt.Add(1)
 
-	err = w.SendMessages(ctx, kafka.Message{
-		Value: safeCopy,
-	})
-	if err != nil {
-		// 日志发送失败时输出到 stderr，避免关键日志静默丢失
-		_, _ = fmt.Fprintf(os.Stderr, "[KafkaWriter] 日志发送失败: %v\n", err)
-		return
+		// 每累计 1000 条丢弃日志才向 stderr 提示一次, 防止刷屏
+		if dropped%1000 == 1 {
+			_, _ = fmt.Fprintf(os.Stderr, "[KafkaWriter] 队列已满, 已累计丢弃 %d 条日志\n", dropped)
+		}
 	}
 
-	n = len(p)
+	return len(p), nil
+}
 
-	return
+// loop 后台消费队列, 串行调用 SendMessages
+func (w *KafkaWriter) loop() {
+	for payload := range w.ch {
+		ctx, cancel := context.WithTimeout(context.Background(), kafkaWriteTimeout)
+
+		err := w.SendMessages(ctx, kafka.Message{Value: payload})
+
+		cancel()
+
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "[KafkaWriter] 日志发送失败: %v\n", err)
+		}
+	}
 }
 
 func (w *KafkaWriter) Sync() error {

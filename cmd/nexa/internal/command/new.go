@@ -33,17 +33,18 @@ func NewCmd() (*cobra.Group, *cobra.Command) {
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 	}
 
-	cmd.AddCommand(
-		newDaoCmd(force),
-		newEchoctxCmd(force),
-	)
-
 	cmd.PersistentFlags().BoolVarP(&force, "force", "f", false, "覆盖已存在的文件")
+
+	// 子命令通过指针读取 force, 否则按值传递时拿到的永远是 flag 解析前的初值
+	cmd.AddCommand(
+		newDaoCmd(&force),
+		newEchoctxCmd(&force),
+	)
 
 	return g, cmd
 }
 
-func newDaoCmd(force bool) (cmd *cobra.Command) {
+func newDaoCmd(force *bool) (cmd *cobra.Command) {
 	var (
 		di bool
 	)
@@ -66,7 +67,7 @@ func newDaoCmd(force bool) (cmd *cobra.Command) {
 			}
 
 			for _, name := range names {
-				err = g.Generate(gen.PackageDao, name, force, func(g *gen.Gen, c *base.CommonTemplateVariables) any {
+				err = g.Generate(gen.PackageDao, name, *force, func(g *gen.Gen, c *base.CommonTemplateVariables) any {
 					return &base.DaoTemplateVariables{
 						CommonTemplateVariables: c,
 						EntPkgImport:            g.Config.GetEntPkgPath(),
@@ -115,7 +116,7 @@ func newDaoCmd(force bool) (cmd *cobra.Command) {
 	return
 }
 
-func newEchoctxCmd(force bool) (cmd *cobra.Command) {
+func newEchoctxCmd(force *bool) (cmd *cobra.Command) {
 	return &cobra.Command{
 		Use:               "echoctx [names]",
 		Short:             "新建数据访问对象模板",
@@ -134,7 +135,7 @@ func newEchoctxCmd(force bool) (cmd *cobra.Command) {
 			}
 
 			for _, name := range names {
-				err = g.Generate(gen.PackageEchoctx, name, force, func(_ *gen.Gen, c *base.CommonTemplateVariables) any {
+				err = g.Generate(gen.PackageEchoctx, name, *force, func(_ *gen.Gen, c *base.CommonTemplateVariables) any {
 					return &base.EchoCtxTemplateVariables{
 						CommonTemplateVariables: c,
 						Name:                    name,

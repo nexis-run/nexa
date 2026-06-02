@@ -64,16 +64,17 @@ var _ = RBACMiddleware
 
 // RBACMiddleware 权限控制中间件
 func RBACMiddleware(opts ...RBACMiddlewareOption) echo.MiddlewareFunc {
+	// cfg 在构造期就生成, 避免每个请求都重复 apply 一遍 opts
+	cfg := &RBACMiddlewareConfig{
+		EnableRemoteAuth: true,
+	}
+
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			cfg := &RBACMiddlewareConfig{
-				EnableRemoteAuth: true,
-			}
-
-			for _, opt := range opts {
-				opt(cfg)
-			}
-
 			ctx := GetContext(c)
 
 			// 是否跳过权限检查

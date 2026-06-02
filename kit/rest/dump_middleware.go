@@ -36,6 +36,9 @@ var (
 	dumpRightSplit = append(RightSquareBracket, append(bytes.Repeat(Hyphen, 4), Newline...)...)
 )
 
+// dumpBodyMaxBytes 单次 dump 抓取请求体的最大字节数, 避免无限读取导致内存膨胀
+const dumpBodyMaxBytes = 10 << 20 // 10 MiB
+
 type DumpHandler func(echo.Context, []byte, []byte)
 
 type HeaderSkipper func(string) bool
@@ -164,8 +167,9 @@ func dump(handler DumpHandler) echo.MiddlewareFunc {
 			// Request
 			var reqBody []byte
 
-			if c.Request().Body != nil { // Read
-				reqBody, _ = io.ReadAll(c.Request().Body)
+			if c.Request().Body != nil {
+				// 限制 dump 抓取的 body 大小, 避免大请求体把整个进程内存吃满
+				reqBody, _ = io.ReadAll(io.LimitReader(c.Request().Body, dumpBodyMaxBytes))
 			}
 
 			c.Request().Body = io.NopCloser(bytes.NewBuffer(reqBody)) // Reset

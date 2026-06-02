@@ -52,7 +52,9 @@ func LoadTemplates(tmpls embed.FS, templatesDir string) (ht *HTMLTemplate) {
 			return nil
 		}
 
-		pt, err := template.New(name).Parse(string(b))
+		var pt *template.Template
+
+		pt, err = template.New(name).Parse(string(b))
 		if err != nil {
 			zap.L().Error("解析模板失败", zap.String("name", name), zap.Error(err))
 			return nil
