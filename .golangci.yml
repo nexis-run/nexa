@@ -36,8 +36,6 @@ linters:
             enabled: true
             allowed_names:
               - err
-              - snagErr
-              - httpErr
     dupl:
       # Tokens count to trigger issue.
       # Default: 150
@@ -61,12 +59,12 @@ linters:
       branch-max-lines: 2
       case-max-lines: 0
       default: none
+      # decl 与 assign-exclusive 已主动关掉：允许 `var b strings.Builder` 直接跟 `ts := ...`、
+      # `_, _ = fmt.Fprintf(...)` 等紧凑写法，避免函数开头的初始化语句被强制分散成多段
       enable:
         - append
         - assign
-        - assign-exclusive
         - branch
-        - decl
         - defer
         - err
         - for
