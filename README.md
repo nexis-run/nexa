@@ -6,6 +6,8 @@ Nexa 是一个面向 **NEXA 框架** 的实用工具（CLI），用于辅助项�
 
 ## Install
 
+> 拉取 `nexis.run` 私有模块前，请先完成 [私有依赖配置](docs/private-modules.md)。
+
 ### Option 1: go install
 
 ```bash
