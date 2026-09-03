@@ -3,7 +3,7 @@
 set -e
 
 # GitHub repository information
-GITHUB_REPO="nexisproject/nexa"
+GITHUB_REPO="nexis-run/nexa"
 BINARY_NAME="nexa"
 
 # Colors for output
@@ -232,4 +232,3 @@ main() {
 }
 
 main
-

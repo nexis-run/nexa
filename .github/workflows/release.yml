@@ -1,0 +1,75 @@
+name: Release CLI
+
+on:
+  push:
+    branches:
+      - 'master'
+    paths:
+      - '.github/workflows/release.yml'
+      - 'cmd/nexa/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: 'release-${{ github.ref }}'
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Read release metadata
+        id: metadata
+        shell: bash
+        run: |
+          version=$(sed -nE 's/^[[:space:]]*Version[[:space:]]*= "([^"]+)"/\1/p' cmd/nexa/main.go)
+          if [[ -z "$version" ]]; then
+            echo '无法从 cmd/nexa/main.go 读取版本号' >&2
+            exit 1
+          fi
+
+          hash=$(git rev-parse --short=7 HEAD)
+          build_time=$(date -u '+%Y-%m-%dT%H:%M:%S+00:00')
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "hash=$hash" >>"$GITHUB_OUTPUT"
+          echo "build_time=$build_time" >>"$GITHUB_OUTPUT"
+          echo "tag=${version}.${hash}" >>"$GITHUB_OUTPUT"
+
+      - name: Build release binaries
+        env:
+          VERSION: '${{ steps.metadata.outputs.version }}'
+          HASH: '${{ steps.metadata.outputs.hash }}'
+          BUILD_TIME: '${{ steps.metadata.outputs.build_time }}'
+        run: make all
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: '${{ github.token }}'
+          TAG: '${{ steps.metadata.outputs.tag }}'
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" bin/* --clobber
+          else
+            gh release create "$TAG" bin/* \
+              --generate-notes \
+              --target "$GITHUB_SHA" \
+              --title "$TAG"
+          fi

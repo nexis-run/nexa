@@ -6,18 +6,22 @@ Nexa 是一个面向 **NEXA 框架** 的实用工具（CLI），用于辅助项�
 
 ## Install
 
-> 拉取 `nexis.run` 私有模块前，请先完成 [私有依赖配置](docs/private-modules.md)。
+### Option 1: install script
 
-### Option 1: go install
+```bash
+curl -fsSL https://nexis.run/nexa | bash
+```
+
+### Option 2: go install
 
 ```bash
 go install nexis.run/nexa/cmd/nexa@latest
 ```
 
-### Option 2: build from source
+### Option 3: build from source
 
 ```bash
-git clone https://github.com/nexisproject/nexa.git
+git clone https://github.com/nexis-run/nexa.git
 cd nexa
 go build -o nexa ./cmd/nexa
 ./nexa --help
