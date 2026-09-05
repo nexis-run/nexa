@@ -66,6 +66,11 @@ func (generator *Gen) PlanDAO(names []string, force bool, withDI bool) (files []
 		files = append(files, fileplan.File{Path: outputPath(directory, name), Content: content, Overwrite: force})
 	}
 
+	err = preflightDeclarations(directory, files)
+	if err != nil {
+		return
+	}
+
 	if withDI {
 		var file fileplan.File
 

@@ -61,11 +61,16 @@ func (generator *Gen) PlanEchoContext(names []string, force bool) (files []filep
 		files = append(files, fileplan.File{Path: outputPath(directory, name), Content: content, Overwrite: force})
 	}
 
+	err = preflightDeclarations(directory, files)
+	if err != nil {
+		files = nil
+	}
+
 	return
 }
 
 func (generator *Gen) preparePackage(configuredPath string, names []string) (directory, packageName string, err error) {
-	err = validateNames(names)
+	err = base.ValidateNames(names)
 	if err != nil {
 		return
 	}
@@ -99,26 +104,6 @@ func (generator *Gen) preparePackage(configuredPath string, names []string) (dir
 	packageName, err = base.ResolvePackageName(directory)
 
 	return
-}
-
-func validateNames(names []string) error {
-	if len(names) == 0 {
-		return base.ErrNameRequired
-	}
-
-	for index, name := range names {
-		if !base.StringIsExportedIdentifier(name) {
-			return fmt.Errorf("%w：%s", base.ErrInvalidExportedName, name)
-		}
-
-		for _, previous := range names[:index] {
-			if strings.EqualFold(previous, name) {
-				return fmt.Errorf("名称重复或生成文件名冲突：%s、%s", previous, name)
-			}
-		}
-	}
-
-	return nil
 }
 
 func preflightFiles(directory string, filenames []string) error {

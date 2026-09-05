@@ -18,8 +18,8 @@ import (
 
 // PlanNew 预检所有名称并渲染 schema，不写入项目文件
 func (eng *EntGen) PlanNew(names []string, force bool) (files []fileplan.File, err error) {
-	if len(names) == 0 {
-		err = fmt.Errorf("至少提供一个 schema 名称")
+	err = base.ValidateNames(names)
+	if err != nil {
 		return
 	}
 
@@ -34,22 +34,12 @@ func (eng *EntGen) PlanNew(names []string, force bool) (files []fileplan.File, e
 	seen := make(map[string]bool)
 
 	for _, name := range names {
-		if !base.StringIsExportedIdentifier(name) {
-			err = fmt.Errorf("schema 名称必须是大写字母开头的 Go 标识符：%s", name)
-			return
-		}
-
 		err = gen.ValidSchemaName(name)
 		if err != nil {
 			return
 		}
 
 		key := strings.ToLower(name)
-		if seen[key] {
-			err = fmt.Errorf("schema 文件名重复：%s", name)
-			return
-		}
-
 		seen[key] = true
 	}
 

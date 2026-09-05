@@ -9,9 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
-	"reflect"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -159,33 +157,6 @@ func Load[T Configurable](p string) (c T, err error) {
 	}
 
 	return
-}
-
-// validateIntegerConversion 拒绝浮点数到整数字段的截断和溢出
-func validateIntegerConversion(from, to reflect.Value) (any, error) {
-	if from.Kind() != reflect.Float32 && from.Kind() != reflect.Float64 {
-		return from.Interface(), nil
-	}
-
-	kind := to.Kind()
-	if kind < reflect.Int || kind > reflect.Uint64 {
-		return from.Interface(), nil
-	}
-
-	number := from.Float()
-	upper := math.Ldexp(1, to.Type().Bits())
-	lower := 0.0
-
-	if kind <= reflect.Int64 {
-		upper /= 2
-		lower = -upper
-	}
-
-	if math.IsNaN(number) || math.Trunc(number) != number || number < lower || number >= upper {
-		return nil, fmt.Errorf("%v 不能无损转换为 %s", number, to.Type())
-	}
-
-	return from.Interface(), nil
 }
 
 // IsVaild 检查日志配置是否合法

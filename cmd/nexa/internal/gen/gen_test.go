@@ -139,3 +139,24 @@ func testGenerator(t *testing.T) *Gen {
 
 	return generator
 }
+
+func TestPlanRejectsNamesAndDeclarations(t *testing.T) {
+	generator := testGenerator(t)
+
+	for _, names := range [][]string{
+		{"Rider_Test"}, {"Rider_Linux"}, {"Rider_AMD64"}, {"Rider", "GetRider"},
+	} {
+		files, err := generator.PlanEchoContext(names, true)
+		require.Error(t, err)
+		require.Empty(t, files)
+	}
+
+	directory, err := generator.Config.GetAbsPath(generator.Config.EchoctxPath)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(directory, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "existing.go"), []byte("package app\nvar RiderContext any\n"), 0644))
+
+	_, err = generator.PlanEchoContext([]string{"Rider"}, true)
+	require.ErrorContains(t, err, "RiderContext")
+	require.NoFileExists(t, filepath.Join(directory, "rider.go"))
+}

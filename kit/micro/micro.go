@@ -20,6 +20,7 @@ func New(address string, register Handler, opts ...grpc.ServerOption) (server *g
 			RecoverMiddleware(),
 		),
 		grpc.StreamInterceptor(RecoverStreamInterceptor()),
+		grpc.UnaryInterceptor(RecoverUnaryInterceptor()),
 	}, opts...)
 
 	server = grpc.NewServer(opts...)

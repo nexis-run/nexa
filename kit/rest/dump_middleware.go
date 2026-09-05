@@ -100,17 +100,15 @@ func (w *DumpResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (w *DumpResponseWriter) Flush() {
-	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
+	_ = w.FlushError()
+}
+
+func (w *DumpResponseWriter) FlushError() error {
+	return http.NewResponseController(w.ResponseWriter).Flush()
 }
 
 func (w *DumpResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	if hijacker, ok := w.ResponseWriter.(http.Hijacker); ok {
-		return hijacker.Hijack()
-	}
-
-	return nil, nil, http.ErrNotSupported
+	return http.NewResponseController(w.ResponseWriter).Hijack()
 }
 
 func (w *DumpResponseWriter) Unwrap() http.ResponseWriter {
@@ -153,6 +151,9 @@ func dump(cfg *DumpConfig, handler DumpHandler) echo.MiddlewareFunc {
 			}()
 
 			err = next(c)
+			if err != nil {
+				c.Error(err)
+			}
 
 			if requestBodyCapture != nil && requestBodyCapture.truncated {
 				c.Set(dumpRequestBodyTruncatedKey, true)

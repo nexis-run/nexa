@@ -31,6 +31,22 @@ func RecoverMiddleware() middleware.Middleware {
 	}
 }
 
+// RecoverUnaryInterceptor 保护一元 RPC 的处理过程
+func RecoverUnaryInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, request any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (reply any, err error) {
+		defer func() {
+			if value := recover(); value != nil {
+				reply = nil
+				err = panicError(value)
+			}
+		}()
+
+		reply, err = handler(ctx, request)
+
+		return
+	}
+}
+
 // RecoverStreamInterceptor 保护完整的流处理过程，可与自定义流拦截器组合
 func RecoverStreamInterceptor() grpc.StreamServerInterceptor {
 	return func(server any, stream grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {

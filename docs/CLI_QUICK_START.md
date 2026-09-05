@@ -34,17 +34,20 @@ go test ./...
 nexa doctor
 ```
 
-`ent new` 创建 schema 文件，`ent generate` 生成 Ent 客户端和扩展代码，`new dao` 根据实体生成 DAO，`new echoctx` 创建 Echo Context。名称支持一次传入多个，必须是大写字母开头的 Go 标识符。
+`ent new` 创建 schema 文件，`ent generate` 生成 Ent 客户端和扩展代码，`new dao` 根据实体生成 DAO，`new echoctx` 创建 Echo Context。名称支持一次传入多个，必须是大写字母开头的 Go 标识符，且不能生成 `_test.go` 或带有系统、架构后缀的文件，例如 `User_Test`、`Rider_Linux`。
 
-DAO 和 Echo Context 使用现有 Go 包声明，目录名可以与包名不同。schema 列表、DAO 预检和包名解析都遵守当前平台的 Go 构建约束，不解析被排除的源文件。
+DAO 和 Echo Context 使用现有 Go 包声明，目录名可以与包名不同。生成前检查整批输出与其他源文件中的类型、函数和变量声明冲突；`--force` 只允许覆盖目标文件。schema 列表、DAO 预检和包名解析都遵守当前平台的 Go 构建约束，不解析被排除的源文件。
 
 默认 DAO 构造器采用显式注入：
 
 ```go
 userDAO := dao.NewUser(client)
+query := userDAO.Query()
+entityClient := userDAO.Client()
+transactionDAO := userDAO.Tx(tx)
 ```
 
-`new dao` 默认维护配置中的 `Dao` 结构体与 `daoProviderSet`。DI 文件不存在时自动创建，已有 DI 保留自定义 provider、别名和 Wire 显式字段名单。应用使用 Wire 时，需要提供 `*ent.Client`；CLI 不创建数据库连接。只生成 DAO 文件时使用 `--di=false`。
+`new dao` 默认维护配置中的 `Dao` 结构体与 `daoProviderSet`。DI 文件不存在时自动创建，已有 DI 保留自定义 provider 与别名，并补齐请求实体的 Wire 显式字段名单。已有实体的构造器由项目维护。应用使用 Wire 时，需要提供 `*ent.Client`；CLI 不创建数据库连接。只生成 DAO 文件时使用 `--di=false`。
 
 使用 Ent 客户端时，在应用启动包空白导入生成包下的 `runtime`。DAO 已包含该导入：
 

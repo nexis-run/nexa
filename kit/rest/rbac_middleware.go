@@ -20,10 +20,18 @@ type RBACMiddlewareConfig struct {
 	StaticUser       *rbac.User    // 静态用户信息（当不使用远程验证时）
 	Skipper          ew.Skipper    // 跳过函数
 	ProjectCode      string        // 项目代码
+	PermissionKey    string        // 服务端绑定的权限键
 	Client           *authz.Client // 权限客户端，空值使用默认客户端
 }
 
 type RBACMiddlewareOption func(*RBACMiddlewareConfig)
+
+// WithRBACPermissionKey 绑定路由所需权限，非空值优先于请求头
+func WithRBACPermissionKey(key string) RBACMiddlewareOption {
+	return func(cfg *RBACMiddlewareConfig) {
+		cfg.PermissionKey = key
+	}
+}
 
 // WithRBACClient 设置独立权限客户端
 func WithRBACClient(client *authz.Client) RBACMiddlewareOption {
@@ -68,7 +76,9 @@ func RBACMiddleware(opts ...RBACMiddlewareOption) echo.MiddlewareFunc {
 	}
 
 	for _, opt := range opts {
-		opt(cfg)
+		if opt != nil {
+			opt(cfg)
+		}
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -82,7 +92,11 @@ func RBACMiddleware(opts ...RBACMiddlewareOption) echo.MiddlewareFunc {
 
 			// 获取用户 token
 			token := c.Request().Header.Get(HeaderAuthToken)
-			permissionKey := c.Request().Header.Get(HeaderPermissionKey)
+
+			permissionKey := cfg.PermissionKey
+			if permissionKey == "" {
+				permissionKey = c.Request().Header.Get(HeaderPermissionKey)
+			}
 
 			// 获取项目代码，优先使用配置中的值
 			projectCode := cfg.ProjectCode

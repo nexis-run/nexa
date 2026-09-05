@@ -40,3 +40,5 @@ if err != nil {
 普通 RPC panic 返回 `Internal` 和通用错误文本；原始 panic 和堆栈仅写入服务端日志。业务代码自行添加的日志字段、错误消息和 panic 内容仍需避免包含密码、令牌等敏感数据。
 
 `micro.New` 默认包含保护完整流式处理过程的 `RecoverStreamInterceptor`。使用自定义 `grpc.StreamInterceptor(...)` 选项时，需要显式将 `micro.RecoverStreamInterceptor()` 放入组合中的第一项，使其覆盖后续拦截器和 handler。
+
+`micro.New` 同时提供 `RecoverUnaryInterceptor`，日志选项包含日志与恢复中间件。使用自定义 `grpc.Middleware` 时，把 `micro.RecoverMiddleware()` 放在组合中的第一项；使用自定义一元拦截器时，把 `micro.RecoverUnaryInterceptor()` 放在第一项。Kratos 的同类配置选项会覆盖此前配置，参见 [Kratos 服务选项](https://github.com/go-kratos/kratos/blob/v2.9.2/transport/grpc/server.go)。

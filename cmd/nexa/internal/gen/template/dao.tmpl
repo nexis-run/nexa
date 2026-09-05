@@ -24,6 +24,16 @@ func New{{ .Name }}(client *ent.Client) *{{ .Name }}Dao {
 }
 {{end}}
 
+// Client 返回当前 DAO 绑定的实体客户端
+func (dao *{{ .Name }}Dao) Client() *ent.{{ .Name }}Client {
+    return dao.orm
+}
+
+// Query 创建查询构造器
+func (dao *{{ .Name }}Dao) Query() *ent.{{ .Name }}Query {
+    return dao.orm.Query()
+}
+
 // Tx 使用事务
 func (dao *{{ .Name }}Dao) Tx(tx *ent.Tx) *{{ .Name }}Dao {
 	return &{{ .Name }}Dao{

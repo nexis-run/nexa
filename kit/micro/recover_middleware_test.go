@@ -23,13 +23,28 @@ func (*panickingHealthServer) Watch(*grpc_health_v1.HealthCheckRequest, grpc.Ser
 	panic("private server details")
 }
 
+func (*panickingHealthServer) Check(_ context.Context, request *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
+	if request.Service == "panic" {
+		panic("private server details")
+	}
+
+	return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
+}
+
 func TestNewRecoversStreamHandlerPanic(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
 	server := New(listener.Addr().String(), func(server *kratosgrpc.Server) {
 		grpc_health_v1.RegisterHealthServer(server, &panickingHealthServer{})
-	}, kratosgrpc.Listener(listener), kratosgrpc.CustomHealth())
+	},
+		kratosgrpc.Listener(listener),
+		kratosgrpc.CustomHealth(),
+		LoggingMiddlewareServerOption(),
+		kratosgrpc.UnaryInterceptor(func(ctx context.Context, request any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+			return handler(ctx, request)
+		}),
+	)
 
 	go func() {
 		_ = server.Start(context.Background())
@@ -59,6 +74,10 @@ func TestNewRecoversStreamHandlerPanic(t *testing.T) {
 	require.Equal(t, codes.Internal, status.Code(err))
 	require.NotContains(t, err.Error(), "private server details")
 
+	_, err = client.Check(ctx, &grpc_health_v1.HealthCheckRequest{Service: "panic"})
+	require.Equal(t, codes.Internal, status.Code(err))
+	require.NotContains(t, err.Error(), "private server details")
+
 	_, err = client.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
-	require.Equal(t, codes.Unimplemented, status.Code(err))
+	require.NoError(t, err)
 }

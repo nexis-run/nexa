@@ -5,6 +5,9 @@
 package rest
 
 import (
+	"errors"
+	"strings"
+
 	zhLocale "github.com/go-playground/locales/zh"
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
@@ -31,11 +34,26 @@ func NewValidator() *Validator {
 }
 
 func (v *Validator) Validate(i any) error {
-	// if err := v.validator.Struct(i); err != nil {
-	// 	return NewError(http.StatusBadRequest, err.Error())
-	// }
-	// return nil
 	return v.validator.Struct(i)
+}
+
+// Translate 按字段顺序输出校验消息，支持默认中文与自定义翻译
+func (v *Validator) Translate(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	var fields validator.ValidationErrors
+	if !errors.As(err, &fields) {
+		return err.Error()
+	}
+
+	messages := make([]string, 0, len(fields))
+	for _, field := range fields {
+		messages = append(messages, field.Translate(v.trans))
+	}
+
+	return strings.Join(messages, "；")
 }
 
 // Validator 获取底层 validator 实例
@@ -48,10 +66,10 @@ func (v *Validator) RegisterValidation(tag string, message ...string) RegisterVa
 	return func(fn validator.Func) (err error) {
 		err = v.validator.RegisterValidation(tag, fn)
 		if err != nil {
-			return err
+			return
 		}
 
-		return v.validator.RegisterTranslation(
+		err = v.validator.RegisterTranslation(
 			tag,
 			v.trans,
 			func(ut ut.Translator) error {
@@ -67,5 +85,7 @@ func (v *Validator) RegisterValidation(tag string, message ...string) RegisterVa
 				return t
 			},
 		)
+
+		return
 	}
 }

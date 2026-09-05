@@ -13,8 +13,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gopkg.auroraride.com/rbac"
 
 	"nexis.run/nexa/kit/authz"
@@ -129,4 +132,63 @@ func TestGetRequestURL(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, tc.want, actual.String())
 	}
+}
+
+func TestResponseErrorEntrypoints(t *testing.T) {
+	cases := []struct {
+		failure error
+		status  int
+		message string
+	}{
+		{errors.New("private database details"), http.StatusInternalServerError, "Internal Server Error"},
+		{NewError(http.StatusInternalServerError, "private server details"), http.StatusInternalServerError, "Internal Server Error"},
+		{status.Error(codes.NotFound, "record missing"), http.StatusNotFound, "record missing"},
+		{NewError(http.StatusConflict, "record exists"), http.StatusConflict, "record exists"},
+	}
+
+	for _, test := range cases {
+		for _, direct := range []bool{false, true} {
+			server := New("test", nil)
+			server.GET("/", func(c echo.Context) error {
+				if direct {
+					return GetContext(c).SendResponse(map[string]string{"secret": "partial data"}, test.failure)
+				}
+
+				return test.failure
+			})
+
+			response := httptest.NewRecorder()
+			server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+			require.Equal(t, test.status, response.Code)
+			require.Contains(t, response.Body.String(), test.message)
+			require.NotContains(t, response.Body.String(), "private")
+			require.NotContains(t, response.Body.String(), "partial data")
+		}
+	}
+
+	var empty *Error
+	server := New("test", nil)
+	require.NotPanics(t, func() {
+		handleHTTPError(empty, server.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder()))
+	})
+}
+
+func TestBindValidateUsesCustomTranslation(t *testing.T) {
+	server := New("test", nil)
+	validation := NewValidator()
+	require.NoError(t, validation.RegisterValidation("allowed", "{0}不在允许范围内")(func(validator.FieldLevel) bool { return false }))
+	server.Validator = validation
+
+	type request struct {
+		Name string `json:"name" validate:"allowed"`
+	}
+
+	incoming := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"example"}`))
+	incoming.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	ctx := NewContext("test", server.NewContext(incoming, httptest.NewRecorder()))
+	err := ctx.BindAndValidate(&request{})
+	require.ErrorContains(t, err, "Name不在允许范围内")
+
+	var fields validator.ValidationErrors
+	require.ErrorAs(t, err, &fields)
 }

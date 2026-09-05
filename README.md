@@ -54,9 +54,9 @@ nexa ent generate --check --json
 nexa config validate
 ```
 
-名称必须是大写字母开头的 Go 标识符。生成命令支持批量预检、`--dry-run` 预览和 `--check` 差异检查。内容相同的文件不重写；初始化、schema、DAO 和 Echo Context 模板内容不同时，需要 `--force` 才能覆盖。`--check` 有差异返回状态码 `2`，其他错误返回 `1`。
+名称必须是大写字母开头的 Go 标识符，且不能生成 `_test.go` 或平台专属文件。DAO 与 Context 生成会检查整个包内的顶层声明冲突。生成命令支持批量预检、`--dry-run` 预览和 `--check` 差异检查。内容相同的文件不重写；初始化、schema、DAO 和 Echo Context 模板内容不同时，需要 `--force` 才能覆盖。`--check` 有差异返回状态码 `2`，其他错误返回 `1`。
 
-`new dao` 根据已有 Ent 实体生成代码，默认构造器接收 `*ent.Client`。默认配置的 DI 文件不存在时自动创建，已有 DI 保留自定义字段、provider 和 Wire 字段名单。只生成 DAO 时使用 `--di=false`；需要生成 Wire 注入代码时，在应用的注入函数中提供 `*ent.Client`。显式设置 `ormclient` 时，DAO 使用该表达式创建无参数构造器。
+`new dao` 根据已有 Ent 实体生成代码，默认构造器接收 `*ent.Client`。DAO 提供 `Client()`、`Query()` 和 `Tx(tx)`，可使用当前实体客户端的完整类型化 API。默认配置的 DI 文件不存在时自动创建，已有 DI 保留自定义字段和 provider，并补齐请求实体的 Wire 字段名单。只生成 DAO 时使用 `--di=false`；需要生成 Wire 注入代码时，在应用的注入函数中提供 `*ent.Client`。显式设置 `ormclient` 时，DAO 使用该表达式创建无参数构造器。
 
 `ent generate` 在临时目录运行 Ent，成功后应用生成文件变更。手写文件不自动覆盖；带有 Ent 生成标记的过期文件会删除。该命令及其预览、检查模式都会执行项目 schema 代码，且依赖需事先准备好，生成过程不自动修改 `go.mod` 或 `go.sum`。
 
@@ -88,7 +88,7 @@ err = client.User.HardDeleteOneID(ctx, id)
 
 `graceful.Run` 等待系统信号，`graceful.RunContext` 接受调用方的取消上下文。服务的 `Start` 必须完成初始化、启动后台服务后返回；`Stop` 与初始化串行，使用独立的关闭期限。完整约定见 [服务启动与关闭](docs/graceful-shutdown.md)。
 
-REST 响应的 `code` 同时作为 HTTP 状态码。错误处理器支持 Nexa、Echo 和 gRPC／Kratos 错误，服务端错误统一返回通用消息。普通与流式 RPC 的默认恢复逻辑将 panic 转为 `Internal`，详细错误与堆栈写入服务端日志。自定义流式拦截器时的组合方式见 [gRPC 日志](docs/grpc-logging.md)。
+REST 响应的 `code` 同时作为 HTTP 状态码。`SendResponse(result, err)` 与返回错误使用一致的状态映射，支持 Nexa、Echo 和 gRPC／Kratos 错误。未知错误返回 `500`，服务端错误使用通用消息，出错时不输出部分业务数据。业务错误通过 `rest.NewError` 或 `rest.WrapError` 指定状态码。`Validator.Translate(err)` 提供中文与自定义校验消息，`BindAndValidate` 使用该翻译，并保留可通过 `errors.As` 访问的原始错误。普通与流式 RPC 的默认恢复逻辑将 panic 转为 `Internal`，详细错误与堆栈写入服务端日志。自定义流式拦截器时的组合方式见 [gRPC 日志](docs/grpc-logging.md)。
 
 CORS 白名单显式覆盖默认值：
 
@@ -110,11 +110,13 @@ server.Use(rest.CORSMiddleware(
 
 `authz.New` 创建独立客户端，调用方负责 `Close`。REST 通过 `WithRBACClient(client)` 使用指定实例；`authz.Setup` 提供进程级默认客户端并返回初始化错误，`authz.Close` 释放默认连接。
 
+路由所需权限通过 `WithRBACPermissionKey(key)` 绑定，项目通过 `WithRBACProjectCode(code)` 指定；非空配置优先于请求头。未配置时读取对应请求头，调用方负责在可信入口绑定权限与路由。
+
 非本地连接应通过 `WithTransportCredentials` 配置 TLS。认证信息会写入 outgoing metadata，同时保留请求追踪等其他字段。
 
 ### 应用配置与 ID 生成
 
-`configure.Load[T]` 读取单个 YAML 文档，支持 `koanf` 字段标签、嵌入配置、时间间隔和逗号分隔列表。应用名称不能是空白，启用的 Kafka 日志配置必须提供非空 topic 和 brokers。
+`configure.Load[T]` 读取单个 YAML 文档，支持 `koanf` 字段标签、嵌入配置、时间间隔和逗号分隔列表。应用名称不能是空白，启用的 Kafka 日志配置必须提供非空 topic 和 brokers。整数转换拒绝溢出、符号丢失与小数截断。
 
 使用 `Configure.Sonyflake()` 时必须配置实例编号：
 

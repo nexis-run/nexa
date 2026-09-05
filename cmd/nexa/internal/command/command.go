@@ -1,7 +1,6 @@
 package command
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -17,28 +16,6 @@ func examples(commands ...string) string {
 	return strings.Join(commands, "\n")
 }
 
-func exportedIdentifierArgs(_ *cobra.Command, names []string) (err error) {
-	if len(names) == 0 {
-		err = base.ErrNameRequired
-		return
-	}
-
-	seen := make(map[string]bool)
-
-	for _, name := range names {
-		if !base.StringIsExportedIdentifier(name) {
-			err = fmt.Errorf("%w：%s", base.ErrInvalidExportedName, name)
-			return
-		}
-
-		key := strings.ToLower(name)
-		if seen[key] {
-			err = fmt.Errorf("名称重复或生成文件名冲突：%s", name)
-			return
-		}
-
-		seen[key] = true
-	}
-
-	return
+func exportedIdentifierArgs(_ *cobra.Command, names []string) error {
+	return base.ValidateNames(names)
 }

@@ -5,12 +5,8 @@
 package rest
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 	"reflect"
-
-	"github.com/labstack/echo/v4"
 )
 
 type Response struct {
@@ -39,7 +35,7 @@ func (r *Response) SetMessage(message string) *Response {
 }
 
 // SetData 设置data
-// 仅过滤 nil 值, 数值零值 / 空串 / 空 struct 等有效零值原样保留
+// 仅过滤 nil 值，数值零值、空串和空结构体原样保留
 func (r *Response) SetData(data any) *Response {
 	if data == nil {
 		return r
@@ -65,44 +61,27 @@ func (r *Response) SetData(data any) *Response {
 
 // SetParams 设置响应参数
 func (r *Response) SetParams(params ...any) *Response {
-	for i := 0; i < len(params); i++ {
-		switch v := params[i].(type) {
+	var failure *Response
+
+	for _, param := range params {
+		switch value := param.(type) {
 		case int:
-			r.SetCode(v)
+			r.SetCode(value)
 		case string:
-			r.SetMessage(v)
+			r.SetMessage(value)
 		case error:
-			var responseErr *Error
-			var he *echo.HTTPError
-
-			switch {
-			case errors.As(v, &responseErr):
-				if responseErr == nil {
-					continue
-				}
-
-				r.SetCode(responseErr.Code).SetMessage(responseErr.Message)
-
-				continue
-			case errors.As(v, &he):
-				if he == nil {
-					continue
-				}
-
-				r.SetCode(he.Code)
-				r.SetMessage(fmt.Sprint(he.Message))
-			default:
-				r.SetMessage(v.Error())
-			}
-
-			if r.Code == http.StatusOK {
-				r.SetCode(http.StatusBadRequest)
+			if response := responseFromError(value); response != nil {
+				failure = response
 			}
 		default:
 			if r.Data == nil {
-				r.SetData(v)
+				r.SetData(value)
 			}
 		}
+	}
+
+	if failure != nil {
+		*r = *failure
 	}
 
 	if r.Message == "" {

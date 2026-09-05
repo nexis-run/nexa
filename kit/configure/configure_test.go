@@ -85,3 +85,31 @@ func TestLoadConversionsAndInvalidDocuments(t *testing.T) {
 	_, err = Load[config](path)
 	require.ErrorIs(t, err, kit.ErrConfigMissName)
 }
+
+func TestLoadIntegerBounds(t *testing.T) {
+	type settings struct {
+		Configure
+		Workers  uint8
+		Delta    int8
+		Sequence int64
+	}
+
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	prefix := "app: example\nenvironment: development\nlogger:\n  stdout: true\n"
+
+	for _, invalid := range []string{
+		"workers: 256", "workers: -1", "workers: 1.5",
+		"delta: 128", "delta: -129", "sequence: 18446744073709551615",
+	} {
+		require.NoError(t, os.WriteFile(path, []byte(prefix+invalid), 0600))
+		_, err := Load[settings](path)
+		require.Error(t, err, invalid)
+	}
+
+	require.NoError(t, os.WriteFile(path, []byte(prefix+"workers: 255\ndelta: -128\nsequence: 9223372036854775807\n"), 0600))
+	loaded, err := Load[settings](path)
+	require.NoError(t, err)
+	require.Equal(t, uint8(255), loaded.Workers)
+	require.Equal(t, int8(-128), loaded.Delta)
+	require.Equal(t, int64(9223372036854775807), loaded.Sequence)
+}

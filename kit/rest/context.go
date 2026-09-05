@@ -70,12 +70,18 @@ func (c *Context) BindValidate(ptr any) {
 func (c *Context) BindAndValidate(ptr any) error {
 	err := c.Bind(ptr)
 	if err != nil {
-		return NewError(http.StatusBadRequest, err.Error())
+		return WrapError(http.StatusBadRequest, err)
 	}
 
 	err = c.Validate(ptr)
 	if err != nil {
-		return NewError(http.StatusBadRequest, err.Error())
+		response := WrapError(http.StatusBadRequest, err)
+
+		if translator, ok := c.Echo().Validator.(interface{ Translate(error) string }); ok {
+			response.Message = translator.Translate(err)
+		}
+
+		return response
 	}
 
 	return nil

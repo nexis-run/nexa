@@ -47,3 +47,18 @@ func TestDumpPreservesAndLimitsBodies(t *testing.T) {
 	require.Equal(t, true, c.Get(dumpRequestBodyTruncatedKey))
 	require.Equal(t, true, c.Get(dumpResponseBodyTruncatedKey))
 }
+
+func TestDumpCapturesErrorResponse(t *testing.T) {
+	server := New("test", nil)
+	var captured []byte
+	server.Use(dump(&DumpConfig{ResponseBody: true, BodyMaxBytes: 1024}, func(_ echo.Context, _, response []byte) {
+		captured = append(captured, response...)
+	}))
+	server.GET("/", func(echo.Context) error { return NewError(http.StatusNotFound, "record missing") })
+
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	require.Equal(t, http.StatusNotFound, response.Code)
+	require.Equal(t, response.Body.Bytes(), captured)
+	require.Contains(t, string(captured), "record missing")
+}

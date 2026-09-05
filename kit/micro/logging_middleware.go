@@ -19,6 +19,7 @@ import (
 func LoggingMiddlewareServerOption() grpc.ServerOption {
 	return grpc.Middleware(
 		LoggingMiddleware(),
+		RecoverMiddleware(),
 	)
 }
 

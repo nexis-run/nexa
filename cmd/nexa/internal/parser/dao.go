@@ -169,7 +169,8 @@ func (dp *DaoProvider) Generate() (result []byte, err error) {
 		return
 	}
 
-	if len(addedFields) == 0 {
+	providerChanged := dp.addProviderSetEntries(providerSet, addedFields)
+	if len(addedFields) == 0 && !providerChanged {
 		result = dp.content
 		return
 	}
@@ -177,8 +178,6 @@ func (dp *DaoProvider) Generate() (result []byte, err error) {
 	if !hasImport(file, dp.importPath) {
 		astutil.AddNamedImport(fset, file, dp.daoPackage, dp.importPath)
 	}
-
-	dp.addProviderSetEntries(providerSet, addedFields)
 
 	var buffer bytes.Buffer
 
@@ -249,7 +248,7 @@ func (dp *DaoProvider) addStructFields(structType *ast.StructType) (addedFields 
 	return
 }
 
-func (dp *DaoProvider) addProviderSetEntries(providerSet *ast.CallExpr, addedFields []string) {
+func (dp *DaoProvider) addProviderSetEntries(providerSet *ast.CallExpr, addedFields []string) (changed bool) {
 	existingProviders := make(map[string]struct{})
 	position := providerSet.Rparen - 1
 
@@ -268,11 +267,16 @@ func (dp *DaoProvider) addProviderSetEntries(providerSet *ast.CallExpr, addedFie
 			X:   newIdentifier(dp.daoPackage, position),
 			Sel: newIdentifier("New"+fieldName, position),
 		})
+		changed = true
 	}
 
 	structProvider := findStructProvider(providerSet, dp.typeName, dp.wirePackage)
 	if structProvider == nil {
-		providerSet.Args = append(providerSet.Args, newStructProvider(dp.typeName, position, dp.wirePackage, addedFields))
+		if len(dp.fields) > 0 {
+			providerSet.Args = append(providerSet.Args, newStructProvider(dp.typeName, position, dp.wirePackage, dp.fields))
+			changed = true
+		}
+
 		return
 	}
 
@@ -282,7 +286,7 @@ func (dp *DaoProvider) addProviderSetEntries(providerSet *ast.CallExpr, addedFie
 
 	existingFields := structProviderFields(structProvider)
 
-	for _, fieldName := range addedFields {
+	for _, fieldName := range dp.fields {
 		if _, exists := existingFields[fieldName]; exists {
 			continue
 		}
@@ -292,7 +296,10 @@ func (dp *DaoProvider) addProviderSetEntries(providerSet *ast.CallExpr, addedFie
 			Kind:     token.STRING,
 			Value:    strconv.Quote(fieldName),
 		})
+		changed = true
 	}
+
+	return
 }
 
 func findStruct(file *ast.File, typeName string) (structType *ast.StructType) {

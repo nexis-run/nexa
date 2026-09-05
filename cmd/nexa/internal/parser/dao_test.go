@@ -122,3 +122,27 @@ var daoProviderSet = wire.NewSet(customExisting, wire.Struct(new(Dao), "Existing
 	require.Contains(t, string(generated), "customExisting")
 	require.Contains(t, string(generated), `wire.Struct(new(Dao), "Existing", "User")`)
 }
+
+func TestDaoProviderCompletesExistingWireField(t *testing.T) {
+	source := []byte(`package di
+import (
+    "github.com/google/wire"
+    "example.com/project/dao"
+)
+type Dao struct { User *dao.UserDao }
+var daoProviderSet = wire.NewSet(customUser, wire.Struct(new(Dao)))
+`)
+	provider, err := ParseDaoProvider(DaoProviderConfig{
+		Path: "di.go", ImportPath: "example.com/project/dao", PackageName: "dao",
+		TypeName: "Dao", VariableName: "daoProviderSet",
+	}, source)
+	require.NoError(t, err)
+	provider.AddField("User")
+	var generated []byte
+
+	generated, err = provider.Generate()
+	require.NoError(t, err)
+	require.Contains(t, string(generated), `wire.Struct(new(Dao), "User")`)
+	require.Contains(t, string(generated), "customUser")
+	require.NotContains(t, string(generated), "dao.NewUser")
+}
