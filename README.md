@@ -166,7 +166,7 @@ go test -race ./...
 go vet ./...
 ```
 
-Pulsar 集成检查需要实际服务，配置方式见对应测试文件。CI 的 PR 任务只检查公开 CLI；可信 `master` 推送或手动任务执行全包检查，需要仓库变量 `NEXA_GITLAB_USERNAME` 和密钥 `NEXA_GITLAB_READ_TOKEN`。
+Pulsar 集成检查需要实际服务，配置方式见对应测试文件。CI 在 PR、`master` 分支推送和手动触发时检查公开 CLI。
 
 发布由 `vX.Y.Z` 稳定版本标签触发，生成 Linux、macOS、Windows 的 amd64／arm64 六个平台文件和 `checksums.txt`。Linux CLI 不依赖动态 glibc。详细构建和发布要求见 [CLI 快速入门](docs/CLI_QUICK_START.md)。
 

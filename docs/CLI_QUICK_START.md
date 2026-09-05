@@ -158,17 +158,10 @@ VERSION=0.1.1 make build-linux-amd64
 
 ## CI
 
-公开 CLI 检查执行 `go test -race ./cmd/nexa/...` 和 `go vet ./cmd/nexa/...`，不需要私有仓库凭据。
-
-全包检查仅在可信 `master` 推送或手动运行时执行。仓库需配置：
-
-- 变量 `NEXA_GITLAB_USERNAME`：GitLab 只读部署令牌的用户名。
-- 密钥 `NEXA_GITLAB_READ_TOKEN`：能读取私有 RBAC 仓库的令牌。
-
-凭据只用于依赖下载步骤，私有依赖不存入 Actions 缓存。缺少配置时全包任务失败；PR 页面会显示全包任务未运行。
+CI 在 PR、`master` 分支推送和手动触发时执行 `go test -race ./cmd/nexa/...` 和 `go vet ./cmd/nexa/...`，检查公开 CLI。
 
 ## 发布
 
 发布工作流由 `vX.Y.Z` 标签触发，标签必须对应稳定语义化版本。工作流验证公开 CLI，生成六个平台产物及 `checksums.txt`，先上传至草稿 Release，再公开发布。已公开版本不能被覆盖。
 
-安装入口使用默认分支的安装脚本，因此上线安装脚本时必须保证已有与其匹配的稳定 Release 和校验文件。发布操作、仓库凭据配置与安装入口上线由维护者执行。
+安装入口使用默认分支的安装脚本，因此上线安装脚本时必须保证已有与其匹配的稳定 Release 和校验文件。发布操作与安装入口上线由维护者执行。
