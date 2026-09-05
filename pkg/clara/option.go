@@ -16,12 +16,6 @@ func (f optionFunc) apply(c *Writer) {
 	f(c)
 }
 
-var (
-	_ = WithRetries
-	_ = WithTimeout
-	_ = WithRetryInterval
-)
-
 func WithRetries(retries int) Option {
 	return optionFunc(func(c *Writer) {
 		c.retries = retries

@@ -43,8 +43,7 @@ var (
 
 	unknownLevelColor = Red
 
-	levelToLowercaseColorString = make(map[zapcore.Level]string, len(levelToColor))
-	levelToCapitalColorString   = make(map[zapcore.Level]string, len(levelToColor))
+	levelToCapitalColorString = make(map[zapcore.Level]string, len(levelToColor))
 )
 
 func unknownLevel(level zapcore.Level) string {
@@ -53,7 +52,6 @@ func unknownLevel(level zapcore.Level) string {
 
 func init() {
 	for level, clr := range levelToColor {
-		levelToLowercaseColorString[level] = clr.Add("[" + level.String() + "]")
 		levelToCapitalColorString[level] = clr.Add("[" + level.CapitalString() + "]")
 	}
 }

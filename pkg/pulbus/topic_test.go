@@ -6,6 +6,8 @@ package pulbus
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultTopicConfig(t *testing.T) {
@@ -25,6 +27,28 @@ func TestDefaultTopicConfig(t *testing.T) {
 
 	if config.Partition != -1 {
 		t.Errorf("Expected partition -1, got %d", config.Partition)
+	}
+}
+
+func TestParseTopicNameRoundTrip(t *testing.T) {
+	for _, topic := range []string{
+		"persistent://public/default/orders-partition-0",
+		"non-persistent://production/app/events-partition-12",
+		"non-persistent://production/app/events",
+	} {
+		config, err := ParseTopicName(" " + topic + " ")
+		require.NoError(t, err)
+		require.Equal(t, topic, config.FullName())
+	}
+
+	config, err := ParseTopicName("orders-partition-3")
+	require.NoError(t, err)
+	require.Equal(t, "orders", config.Topic)
+	require.Equal(t, 3, config.Partition)
+
+	for _, topic := range []string{"", "http://tenant/namespace/topic", "persistent://orders", "tenant//topic", "tenant/namespace/", "orders-partition-invalid", "orders-partition--1"} {
+		_, err = ParseTopicName(topic)
+		require.Error(t, err, topic)
 	}
 }
 

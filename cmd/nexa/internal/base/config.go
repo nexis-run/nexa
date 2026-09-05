@@ -5,52 +5,53 @@
 package base
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"gopkg.in/yaml.v3"
 )
 
-var (
-	cfg     *Config
-	cfgOnce sync.Once
-)
+const DefaultConfigFile = ".nexa.yaml"
+
+type LoadOptions struct {
+	ConfigPath   string
+	Explicit     bool
+	AllowMissing bool
+}
 
 type Config struct {
 	cfgPath string
-	module  string
 
-	RootDir        string `json:"-" yaml:"-"` // nexa 项目根目录
+	RootDir        string `json:"-" yaml:"-"` // Go 模块根目录，未初始化模块时为配置文件目录
 	ConfigFileName string `json:"-" yaml:"-"` // 配置文件名称
 
-	OrmClient string `yaml:"ormclient"` // ORM 客户端，默认值：ent.Database
+	OrmClient string `json:"ormclient" yaml:"ormclient"` // 空值表示通过构造参数注入 Ent 客户端
 
-	EntPath      string   `yaml:"entPath"`      // ent 目录，默认值：internal/infrastructure/ent
-	EntTemplates []string `yaml:"entTemplates"` // ent 代码生成模板目录
-	EntFeatures  []string `yaml:"entFeatures"`  // ent 代码生成特性
-
-	DaoPath     string `yaml:"daoPath"`     // 数据访问对象目录，默认值：internal/infrastructure/dao
-	EchoctxPath string `yaml:"echoctxPath"` // Echo 上下文目录，默认值：internal/app/rest/app
-
-	DI DI `yaml:"di"` // 依赖注入配置
+	EntPath      string   `json:"entPath" yaml:"entPath"`
+	EntTemplates []string `json:"entTemplates" yaml:"entTemplates"`
+	EntFeatures  []string `json:"entFeatures" yaml:"entFeatures"`
+	DaoPath      string   `json:"daoPath" yaml:"daoPath"`
+	EchoctxPath  string   `json:"echoctxPath" yaml:"echoctxPath"`
+	DI           DI       `json:"di" yaml:"di"`
 }
 
 type DI struct {
-	Path              string `yaml:"path"`              // 依赖注入生成文件路径，默认值：internal/di/di.go
-	DaoProviderSetVar string `yaml:"daoProviderSetVar"` // Dao 提供者集合变量名称，默认值：daoProviderSet
-	DaoStructName     string `yaml:"daoStructName"`     // Dao 结构体名称，默认值：Dao
+	Path              string `json:"path" yaml:"path"`
+	DaoProviderSetVar string `json:"daoProviderSetVar" yaml:"daoProviderSetVar"`
+	DaoStructName     string `json:"daoStructName" yaml:"daoStructName"`
 }
 
 func defaultConfig() *Config {
 	return &Config{
-		OrmClient: "ent.Database",
-
-		EntPath:     "internal/infrastructure/ent",
-		DaoPath:     "internal/infrastructure/dao",
-		EchoctxPath: "internal/app/rest/app",
-
+		EntPath:      "internal/infrastructure/ent",
+		EntTemplates: []string{},
+		EntFeatures:  []string{},
+		DaoPath:      "internal/infrastructure/dao",
+		EchoctxPath:  "internal/app/rest/app",
 		DI: DI{
 			Path:              "internal/di/di.go",
 			DaoProviderSetVar: "daoProviderSet",
@@ -59,111 +60,199 @@ func defaultConfig() *Config {
 	}
 }
 
-// DefaultConfig 返回默认配置的 YAML 字符串
-func DefaultConfig() string {
-	defaultCfg := defaultConfig()
-	b, _ := yaml.Marshal(defaultCfg)
-
-	return string(b)
-}
-
-// 读取 YAML 配置文件。如果路径为空，则使用当前工作目录下的 ".nexa.yaml"。
-func loadConfig(cfgPath string) (*Config, error) {
-	c := defaultConfig()
-
-	// 读取配置文件，解析到 Config 结构体
-	b, err := os.ReadFile(cfgPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return c, nil
-		}
-
-		return nil, fmt.Errorf("配置文件读取失败: %v", err)
+// NewDefaultConfig 创建指定目标的默认配置，不读取目标文件内容
+func NewDefaultConfig(path string) (cfg *Config, err error) {
+	if path == "" {
+		path = DefaultConfigFile
 	}
 
-	err = yaml.Unmarshal(b, c)
-	if err != nil {
-		return nil, fmt.Errorf("配置文件解析失败: %v", err)
-	}
+	var absolutePath, root string
 
-	return c, nil
-}
-
-// InitializeConfig 初始化配置文件，如果配置文件不存在，则使用默认配置
-func InitializeConfig(cfgPath string) (err error) {
-	var value *Config
-
-	value, err = loadConfig(cfgPath)
+	absolutePath, err = absoluteConfigPath(path)
 	if err != nil {
 		return
 	}
 
-	value.cfgPath = cfgPath
-	value.ConfigFileName = filepath.Base(cfgPath)
-
-	value.RootDir, err = filepath.Abs(filepath.Dir(cfgPath))
+	root, err = findModuleRoot(filepath.Dir(absolutePath))
 	if err != nil {
 		return
 	}
 
-	value.module, err = GetModule(filepath.Dir(cfgPath))
+	root, err = canonicalPath(root)
 	if err != nil {
 		return
 	}
 
-	cfgOnce.Do(func() {
-		cfg = value
-	})
+	cfg = defaultConfig()
+	cfg.cfgPath = absolutePath
+	cfg.RootDir = root
+	cfg.ConfigFileName = filepath.Base(absolutePath)
 
 	return
 }
 
-// GetConfig 获取全局配置实例
-func GetConfig() (*Config, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("配置未初始化，请先调用 InitializeConfig")
+// LoadConfig 加载独立配置，不修改全局配置或工作目录
+func LoadConfig(opts LoadOptions) (cfg *Config, err error) {
+	var path string
+
+	path, err = discoverConfigPath(opts)
+	if err != nil {
+		return
 	}
 
-	return cfg, nil
+	cfg, err = NewDefaultConfig(path)
+	if err != nil {
+		return
+	}
+
+	var info os.FileInfo
+
+	info, err = os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) && (opts.AllowMissing || isImplicitDefault(opts)) {
+			_, err = os.Lstat(path)
+			if errors.Is(err, os.ErrNotExist) {
+				err = cfg.Validate()
+				return
+			}
+
+			if err == nil {
+				err = fmt.Errorf("配置文件的符号链接目标不存在：%s", path)
+			}
+
+			return
+		}
+
+		err = fmt.Errorf("配置文件读取失败（%s）：%w", path, err)
+
+		return
+	}
+
+	if !info.Mode().IsRegular() {
+		err = fmt.Errorf("配置路径不是普通文件：%s", path)
+		return
+	}
+
+	var content []byte
+
+	content, err = os.ReadFile(path)
+	if err != nil {
+		err = fmt.Errorf("配置文件读取失败（%s）：%w", path, err)
+		return
+	}
+
+	err = decodeConfig(content, cfg)
+	if err != nil {
+		err = fmt.Errorf("配置文件解析失败（%s）：%w", path, err)
+		return
+	}
+
+	err = cfg.Validate()
+
+	return
 }
 
-// GetConfigFilePath 获取配置文件路径
+func decodeConfig(content []byte, cfg *Config) (err error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(content))
+	var document yaml.Node
+
+	err = decoder.Decode(&document)
+	if errors.Is(err, io.EOF) {
+		err = errors.New("配置文件不能为空")
+		return
+	}
+
+	if err != nil {
+		return
+	}
+
+	if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
+		err = errors.New("配置根节点必须是 YAML 映射")
+		return
+	}
+
+	err = rejectNullValues(&document, make(map[*yaml.Node]bool))
+	if err != nil {
+		return
+	}
+
+	var extra yaml.Node
+
+	err = decoder.Decode(&extra)
+	if err == nil {
+		err = errors.New("配置文件只能包含一个 YAML 文档")
+		return
+	}
+
+	if !errors.Is(err, io.EOF) {
+		return
+	}
+
+	decoder = yaml.NewDecoder(bytes.NewReader(content))
+	decoder.KnownFields(true)
+	err = decoder.Decode(cfg)
+
+	return
+}
+
+func rejectNullValues(node *yaml.Node, visited map[*yaml.Node]bool) (err error) {
+	if node == nil || visited[node] {
+		return
+	}
+
+	visited[node] = true
+	if node.Tag == "!!null" {
+		err = fmt.Errorf("第 %d 行的配置值不能为 null", node.Line)
+		return
+	}
+
+	if node.Alias != nil {
+		err = rejectNullValues(node.Alias, visited)
+		return
+	}
+
+	for _, child := range node.Content {
+		err = rejectNullValues(child, visited)
+		if err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+// MarshalYAMLBytes 仅序列化配置字段
+func (c *Config) MarshalYAMLBytes() ([]byte, error) {
+	if c == nil {
+		return nil, errors.New("配置不能为空")
+	}
+
+	return yaml.Marshal(c)
+}
+
+// ConfigExists 报告配置目标是否为现有普通文件
+func (c *Config) ConfigExists() bool {
+	if c == nil {
+		return false
+	}
+
+	info, err := os.Stat(c.cfgPath)
+
+	return err == nil && info.Mode().IsRegular()
+}
+
 func (c *Config) GetConfigFilePath() string {
 	return c.cfgPath
 }
 
-func (c *Config) GetAbsPath(p string) (string, error) {
-	if filepath.IsAbs(p) {
-		return p, nil
+// ResolveModule 验证配置与文件系统并读取 Go 模块路径
+func (c *Config) ResolveModule() (module string, err error) {
+	err = c.Validate()
+	if err != nil {
+		return
 	}
 
-	return filepath.Abs(filepath.Join(c.RootDir, p))
-}
+	module, err = GetModule(c.RootDir)
 
-func (c *Config) GetEntPath() (string, error) {
-	return c.GetAbsPath(c.EntPath)
-}
-
-func (c *Config) GetDaoPath() (string, error) {
-	return c.GetAbsPath(c.DaoPath)
-}
-
-func (c *Config) GetDIPath() (string, error) {
-	return c.GetAbsPath(c.DI.Path)
-}
-
-func (c *Config) GetModule() string {
-	return c.module
-}
-
-func (c *Config) GetPkgPath(p string) string {
-	return GetPkgPath(c.module, c.RootDir, p)
-}
-
-func (c *Config) GetEntPkgPath() string {
-	return c.GetPkgPath(c.EntPath)
-}
-
-func (c *Config) GetDaoPkgPath() string {
-	return c.GetPkgPath(c.DaoPath)
+	return
 }

@@ -32,24 +32,31 @@ func PutBuffer(buf *bytes.Buffer) {
 	}
 }
 
+// Pool 保存同一类型的临时对象，零值可用，首次使用后不能复制
 type Pool[T any] struct {
-	sync.Pool
+	pool sync.Pool
 }
 
-func (p *Pool[T]) Get() T {
-	return p.Pool.Get().(T)
+// Get 获取对象，池为空且未设置工厂时返回 T 的零值
+func (p *Pool[T]) Get() (value T) {
+	item := p.pool.Get()
+	if item != nil {
+		value = item.(T)
+	}
+
+	return
 }
 
 func (p *Pool[T]) Put(x T) {
-	p.Pool.Put(x)
+	p.pool.Put(x)
 }
 
 func NewPool[T any](f func() T) *Pool[T] {
-	return &Pool[T]{
-		Pool: sync.Pool{
-			New: func() any {
-				return f()
-			},
-		},
+	result := &Pool[T]{}
+
+	if f != nil {
+		result.pool.New = func() any { return f() }
 	}
+
+	return result
 }

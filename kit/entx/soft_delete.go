@@ -6,6 +6,7 @@ package entx
 
 import (
 	"context"
+	"fmt"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
@@ -15,6 +16,12 @@ import (
 )
 
 const SoftDeleteField = "deleted_at"
+
+type softDeleteKey struct{}
+
+type softDeleteFilter interface {
+	WhereP(...func(*sql.Selector))
+}
 
 // SoftDeleteMixin 软删除混入
 type SoftDeleteMixin struct {
@@ -35,31 +42,77 @@ func (SoftDeleteMixin) Indexes() []ent.Index {
 	}
 }
 
+// Interceptors 默认过滤已软删除的记录
+func (mixin SoftDeleteMixin) Interceptors() []ent.Interceptor {
+	return []ent.Interceptor{
+		SoftDeleteInterceptor(),
+	}
+}
+
+// Hooks 禁止未显式授权的硬删除
+func (SoftDeleteMixin) Hooks() []ent.Hook {
+	return []ent.Hook{
+		SoftDeleteHook(),
+	}
+}
+
+// SkipSoftDelete 返回一个可查询已删除记录并允许硬删除的上下文
+func SkipSoftDelete(parent context.Context) context.Context {
+	return context.WithValue(parent, softDeleteKey{}, true)
+}
+
+func skipSoftDelete(ctx context.Context) bool {
+	skip, _ := ctx.Value(softDeleteKey{}).(bool)
+
+	return skip
+}
+
+func addSoftDeletePredicate(filter softDeleteFilter) {
+	column := SoftDeleteField
+
+	if metadata, ok := filter.(interface{ SoftDeleteColumn() string }); ok {
+		column = metadata.SoftDeleteColumn()
+	}
+
+	filter.WhereP(sql.FieldIsNull(column))
+}
+
 // SoftDeleteInterceptor 软删除查询拦截器
 func SoftDeleteInterceptor() ent.Interceptor {
-	return ent.InterceptFunc(func(next ent.Querier) ent.Querier {
-		return ent.QuerierFunc(func(ctx context.Context, q ent.Query) (ent.Value, error) {
-			selector, ok := q.(*sql.Selector)
-			if ok {
-				selector.Where(
-					sql.IsNull(selector.C(SoftDeleteField)),
-				)
-			}
+	return ent.TraverseFunc(func(ctx context.Context, query ent.Query) (err error) {
+		if skipSoftDelete(ctx) {
+			return
+		}
 
-			return next.Query(ctx, q)
-		})
+		filter, ok := query.(softDeleteFilter)
+		if !ok {
+			err = fmt.Errorf("%w：%T", ErrSoftDeleteQueryUnsupported, query)
+			return
+		}
+
+		addSoftDeletePredicate(filter)
+
+		return
 	})
 }
 
 // SoftDeleteHook 禁止硬删除
 func SoftDeleteHook() ent.Hook {
 	return func(next ent.Mutator) ent.Mutator {
-		return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-			if m.Op().Is(ent.OpDelete | ent.OpDeleteOne) {
-				return nil, ErrHardDeleteForbidden
+		return ent.MutateFunc(func(ctx context.Context, mutation ent.Mutation) (value ent.Value, err error) {
+			if skipSoftDelete(ctx) {
+				value, err = next.Mutate(ctx, mutation)
+				return
 			}
 
-			return next.Mutate(ctx, m)
+			if mutation.Op().Is(ent.OpDelete | ent.OpDeleteOne) {
+				err = ErrHardDeleteForbidden
+				return
+			}
+
+			value, err = next.Mutate(ctx, mutation)
+
+			return
 		})
 	}
 }

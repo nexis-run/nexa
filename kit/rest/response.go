@@ -71,16 +71,29 @@ func (r *Response) SetParams(params ...any) *Response {
 			r.SetCode(v)
 		case string:
 			r.SetMessage(v)
-		case *Error:
-			r.SetCode(v.Code).SetMessage(v.Message)
 		case error:
-			message := v.Error()
-
+			var responseErr *Error
 			var he *echo.HTTPError
-			if errors.As(v, &he) {
-				message = fmt.Sprintf("%v", he.Message)
+
+			switch {
+			case errors.As(v, &responseErr):
+				if responseErr == nil {
+					continue
+				}
+
+				r.SetCode(responseErr.Code).SetMessage(responseErr.Message)
+
+				continue
+			case errors.As(v, &he):
+				if he == nil {
+					continue
+				}
+
+				r.SetCode(he.Code)
+				r.SetMessage(fmt.Sprint(he.Message))
+			default:
+				r.SetMessage(v.Error())
 			}
-			r.SetMessage(message)
 
 			if r.Code == http.StatusOK {
 				r.SetCode(http.StatusBadRequest)

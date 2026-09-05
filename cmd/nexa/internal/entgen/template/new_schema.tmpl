@@ -17,13 +17,12 @@ func ({{ . }}) Annotations() []schema.Annotation {
     return []schema.Annotation{
         entsql.Annotation{Table: "{{ snake . }}"},
         entsql.WithComments(true),
-        schema.Comment(),
     }
 }
 
 // Fields of the {{ . }}.
 func ({{ . }}) Fields() []ent.Field {
-    return []ent.Field {
+    return []ent.Field{
     }
 }
 

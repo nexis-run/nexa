@@ -5,22 +5,11 @@
 package rest
 
 import (
+	"slices"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
-
-// cors
-var corsConfig = middleware.DefaultCORSConfig
-
-func init() {
-	corsConfig.AllowHeaders = append(corsConfig.AllowHeaders, []string{
-		HeaderContentType,
-	}...)
-	corsConfig.ExposeHeaders = append(corsConfig.ExposeHeaders, []string{
-		HeaderContentType,
-		HeaderDispositionType,
-	}...)
-}
 
 type CORS struct {
 	config middleware.CORSConfig
@@ -38,7 +27,10 @@ func (f corsOptionFunc) apply(cors *CORS) {
 
 func CORSWithAllowOrigins(origins ...string) CORSOption {
 	return corsOptionFunc(func(cors *CORS) {
-		cors.config.AllowOrigins = append(cors.config.AllowOrigins, origins...)
+		cors.config.AllowOrigins = slices.Clone(origins)
+		if len(origins) == 0 {
+			cors.config.AllowOrigins = []string{""}
+		}
 	})
 }
 
@@ -50,19 +42,35 @@ func CORSWithAllowOriginFunc(f func(origin string) (bool, error)) CORSOption {
 
 func CORSWithAllowMethods(methods ...string) CORSOption {
 	return corsOptionFunc(func(cors *CORS) {
-		cors.config.AllowMethods = append(cors.config.AllowMethods, methods...)
+		cors.config.AllowMethods = slices.Clone(methods)
+		if len(methods) == 0 {
+			cors.config.AllowMethods = []string{""}
+		}
 	})
 }
 
 func CORSWithAllowHeaders(headers ...string) CORSOption {
 	return corsOptionFunc(func(cors *CORS) {
-		cors.config.AllowHeaders = append(cors.config.AllowHeaders, headers...)
+		cors.config.AllowHeaders = slices.Clone(headers)
+		if len(headers) == 0 {
+			cors.config.AllowHeaders = []string{""}
+		}
 	})
 }
 
 func CORSMiddlware(options ...CORSOption) echo.MiddlewareFunc {
+	return CORSMiddleware(options...)
+}
+
+func CORSMiddleware(options ...CORSOption) echo.MiddlewareFunc {
+	config := middleware.DefaultCORSConfig
+	config.AllowOrigins = slices.Clone(config.AllowOrigins)
+	config.AllowMethods = slices.Clone(config.AllowMethods)
+	config.AllowHeaders = []string{HeaderContentType}
+	config.ExposeHeaders = []string{HeaderContentType, HeaderDispositionType}
+
 	cors := &CORS{
-		config: corsConfig,
+		config: config,
 	}
 
 	for _, option := range options {

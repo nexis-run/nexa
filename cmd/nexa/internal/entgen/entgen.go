@@ -1,55 +1,92 @@
-// Copyright (C) nexa. 2026-present.
-//
-// Created at 2026-01-27, by liasica
-
 package entgen
 
 import (
+	"bytes"
 	"fmt"
+	"go/format"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"nexis.run/nexa/cmd/nexa/internal/base"
-)
-
-const (
-	genFile = "package ent\n\n//go:generate go run -mod=mod nexis.run/nexa/cmd/nexa@master ent generate\n"
+	"nexis.run/nexa/cmd/nexa/internal/fileplan"
 )
 
 type EntGen struct {
 	cfg *base.Config
 }
 
-func New() (*EntGen, error) {
-	cfg, err := base.GetConfig()
+func New(cfg *base.Config) (entGen *EntGen, err error) {
+	if cfg == nil {
+		err = fmt.Errorf("生成 Ent 配置不能为空")
+		return
+	}
+
+	_, err = cfg.ResolveModule()
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	return &EntGen{cfg: cfg}, nil
+	entGen = &EntGen{cfg: cfg}
+
+	return
 }
 
-// 创建文件夹
-func createDir(target string) error {
-	_, err := os.Stat(target)
-	if err == nil || !os.IsNotExist(err) {
-		return err
+func (eng *EntGen) planGenerateFile(target string) (files []fileplan.File, err error) {
+	path := filepath.Join(target, "generate.go")
+	var entries []os.DirEntry
+
+	entries, err = os.ReadDir(target)
+	if err != nil && !os.IsNotExist(err) {
+		return
 	}
 
-	if err = os.MkdirAll(target, os.ModePerm); err != nil {
-		return fmt.Errorf("文件夹创建失败: %w", err)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+
+		var current []byte
+
+		current, err = os.ReadFile(filepath.Join(target, entry.Name()))
+		if err != nil {
+			return
+		}
+
+		if entry.Name() == "generate.go" || bytes.Contains(current, []byte("//go:generate")) {
+			return
+		}
 	}
 
-	if err = os.WriteFile(filepath.Join(target, "generate.go"), []byte(genFile), 0644); err != nil {
-		return fmt.Errorf("创建 generate.go 文件失败: %w", err)
+	directive := "//go:generate nexa ent generate"
+
+	configPath := eng.cfg.GetConfigFilePath()
+	if configPath != "" {
+		_, err = os.Stat(configPath)
+		if err == nil {
+			var relativeConfig string
+
+			relativeConfig, err = filepath.Rel(target, configPath)
+			if err != nil {
+				return
+			}
+
+			directive = "//go:generate nexa --config " + strconv.Quote(filepath.ToSlash(relativeConfig)) + " ent generate"
+		} else if !os.IsNotExist(err) {
+			return
+		}
 	}
 
-	return nil
-}
+	var content []byte
 
-// 文件是否存在
-func fileExists(target, name string) bool {
-	_, err := os.Stat(filepath.Join(target, strings.ToLower(name+".go")))
-	return err == nil
+	content, err = format.Source(fmt.Appendf(nil, "package %s\n\n%s\n", filepath.Base(target), directive))
+	if err != nil {
+		err = fmt.Errorf("生成 Ent 包名称无效：%w", err)
+		return
+	}
+
+	files = []fileplan.File{{Path: path, Content: content}}
+
+	return
 }

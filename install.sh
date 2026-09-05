@@ -1,234 +1,342 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
-# GitHub repository information
-GITHUB_REPO="nexis-run/nexa"
-BINARY_NAME="nexa"
+GITHUB_REPO='nexis-run/nexa'
+BINARY_NAME='nexa'
+INSTALL_TEMP_DIR=''
+INSTALL_STAGED_DIR=''
+INSTALL_TARGET=''
+INSTALL_VERSION=''
+INSTALL_FORCE=0
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-# Function to print colored messages
 print_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    printf '[INFO] %s\n' "$1"
 }
 
 print_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    printf '[WARN] %s\n' "$1" >&2
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    printf '[ERROR] %s\n' "$1" >&2
 }
 
-# Function to extract version number from nexa --version output
-get_installed_version() {
-    if command -v nexa >/dev/null 2>&1; then
-        local version_output
-        version_output=$(nexa --version 2>/dev/null || echo "")
-        if [ -n "$version_output" ]; then
-            # Extract version from "nexa version 0.1.0.508c2eb (built at 2026-01-20T03:44:43+00:00)"
-            # Format: {major}.{minor}.{patch}.{hash} (built at {timestamp})
-            local version
-            version=$(echo "$version_output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9a-zA-Z]+' | head -1)
-            echo "$version"
-        else
-            echo ""
-        fi
-    else
-        echo ""
+cleanup() {
+    if [[ -n "$INSTALL_TEMP_DIR" && -d "$INSTALL_TEMP_DIR" ]]; then
+        rm -rf -- "$INSTALL_TEMP_DIR"
+    fi
+    if [[ -n "$INSTALL_STAGED_DIR" && -d "$INSTALL_STAGED_DIR" ]]; then
+        rm -rf -- "$INSTALL_STAGED_DIR"
     fi
 }
 
-# Function to get the latest release version from GitHub
-get_latest_version() {
-    local latest_version
-    latest_version=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$latest_version" ]; then
-        print_error "Failed to fetch the latest version from GitHub"
-        exit 1
-    fi
-    echo "$latest_version"
+usage() {
+    printf '%s\n' \
+        '用法：bash install.sh [--version vX.Y.Z] [--force]' \
+        '默认安装最新稳定版本，使用 NEXA_INSTALL_DIR 指定安装目录。' \
+        '--version 指定稳定发布版本。' \
+        '--force 允许重新安装、降级或覆盖无法识别版本的现有程序。'
 }
 
-# Function to compare versions (returns 0 if v1 < v2, 1 if v1 >= v2)
-version_lt() {
-    local v1=$1
-    local v2=$2
+parse_args() {
+    while (($# > 0)); do
+        case "$1" in
+            --version)
+                if (($# < 2)); then
+                    print_error '--version 缺少版本号'
+                    return 1
+                fi
+                INSTALL_VERSION=$2
+                shift 2
+                ;;
+            --force)
+                INSTALL_FORCE=1
+                shift
+                ;;
+            --help | -h)
+                usage
+                exit 0
+                ;;
+            *)
+                print_error "不支持的参数：$1"
+                return 1
+                ;;
+        esac
+    done
+}
 
-    # Remove 'v' prefix if present (for backward compatibility)
-    v1=${v1#v}
-    v2=${v2#v}
+download() {
+    curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --connect-timeout 15 --max-time 300 "$@"
+}
 
-    # Extract base version (before last dot) and hash
-    # Format: 0.1.0.508c2eb -> base=0.1.0, hash=508c2eb
-    local v1_base=""
-    local v1_hash=""
-    if [[ "$v1" =~ ^([0-9]+\.[0-9]+\.[0-9]+)\.([0-9a-zA-Z]+)$ ]]; then
-        v1_base="${BASH_REMATCH[1]}"
-        v1_hash="${BASH_REMATCH[2]}"
-    else
-        v1_base="$v1"
+read_version() {
+    local executable=$1
+    local version_output
+
+    version_output=$("$executable" --version 2>/dev/null) || version_output=''
+    if [[ -z "$version_output" ]]; then
+        version_output=$("$executable" version 2>/dev/null) || version_output=''
     fi
 
-    local v2_base=""
-    local v2_hash=""
-    if [[ "$v2" =~ ^([0-9]+\.[0-9]+\.[0-9]+)\.([0-9a-zA-Z]+)$ ]]; then
-        v2_base="${BASH_REMATCH[1]}"
-        v2_hash="${BASH_REMATCH[2]}"
-    else
-        v2_base="$v2"
+    printf '%s\n' "$version_output" \
+        | sed -nE 's/^(nexa version )?v?([^[:space:]]+)([[:space:]].*)?$/\2/p' \
+        | head -n 1
+}
+
+is_stable_version() {
+    [[ "${1#v}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+}
+
+version_base() {
+    local version=${1#v}
+
+    if [[ "$version" =~ ^((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))([-+][0-9A-Za-z.+-]+|\.[0-9a-fA-F]+)?$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return
     fi
 
-    # Compare base versions first
-    if [ "$(printf '%s\n' "$v1_base" "$v2_base" | sort -V | head -n1)" = "$v1_base" ] && [ "$v1_base" != "$v2_base" ]; then
-        return 0
-    elif [ "$v1_base" != "$v2_base" ]; then
-        return 1
-    fi
-
-    # If base versions are equal, compare git hashes lexicographically
-    if [ -n "$v1_hash" ] && [ -n "$v2_hash" ] && [ "$v1_hash" != "$v2_hash" ]; then
-        if [ "$v1_hash" \< "$v2_hash" ]; then
-            return 0
-        else
-            return 1
-        fi
-    fi
-
-    # If only one has hash, consider it different versions but equal
     return 1
 }
 
-# Function to detect OS and architecture
-detect_platform() {
-    local os
-    local arch
-    os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    arch=$(uname -m)
+version_lt() {
+    local left=$1
+    local right=$2
+    local left_part right_part
 
-    case "$os" in
-        linux*)
-            os="linux"
-            ;;
-        darwin*)
-            os="darwin"
-            ;;
-        mingw* | msys* | cygwin*)
-            os="windows"
-            ;;
-        *)
-            print_error "Unsupported OS: $os"
-            exit 1
-            ;;
-    esac
+    while [[ -n "$left" ]]; do
+        left_part=${left%%.*}
+        right_part=${right%%.*}
+        if ((${#left_part} != ${#right_part})); then
+            ((${#left_part} < ${#right_part}))
+            return
+        fi
+        if [[ "$left_part" != "$right_part" ]]; then
+            [[ "$left_part" < "$right_part" ]]
+            return
+        fi
+        if [[ "$left" != *.* ]]; then
+            return 1
+        fi
+        left=${left#*.}
+        right=${right#*.}
+    done
 
-    case "$arch" in
-        x86_64 | amd64)
-            arch="amd64"
-            ;;
-        arm64 | aarch64)
-            arch="arm64"
-            ;;
-        *)
-            print_error "Unsupported architecture: $arch"
-            exit 1
-            ;;
-    esac
-
-    echo "${os}-${arch}"
+    return 1
 }
 
-# Function to download and install the binary
-install_binary() {
-    local version=$1
-    local platform=$2
+get_latest_tag() {
+    local latest_tag
+    latest_tag=$(download \
+        -H 'Accept: application/vnd.github+json' \
+        -H 'X-GitHub-Api-Version: 2022-11-28' \
+        "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
+        | sed -nE 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/p' \
+        | head -n 1)
 
-    # Construct download URL and binary name
+    if [[ -z "$latest_tag" ]]; then
+        print_error '无法获取最新发布版本，请检查 GitHub 连接，或使用 --version 指定版本'
+        return 1
+    fi
+
+    printf '%s\n' "$latest_tag"
+}
+
+detect_platform() {
+    local operating_system
+    local architecture
+
+    operating_system=$(uname -s | tr '[:upper:]' '[:lower:]')
+    architecture=$(uname -m)
+
+    case "$operating_system" in
+        linux*) operating_system='linux' ;;
+        darwin*) operating_system='darwin' ;;
+        mingw* | msys* | cygwin*) operating_system='windows' ;;
+        *)
+            print_error "不支持的操作系统：${operating_system}"
+            return 1
+            ;;
+    esac
+
+    case "$architecture" in
+        x86_64 | amd64) architecture='amd64' ;;
+        arm64 | aarch64) architecture='arm64' ;;
+        *)
+            print_error "不支持的处理器架构：${architecture}"
+            return 1
+            ;;
+    esac
+
+    printf '%s-%s\n' "$operating_system" "$architecture"
+}
+
+resolve_install_dir() {
+    local platform=$1
+    local install_dir=${NEXA_INSTALL_DIR:-}
+
+    if [[ -z "$install_dir" ]] && command -v go >/dev/null 2>&1; then
+        install_dir=$(go env GOBIN)
+        if [[ -z "$install_dir" ]]; then
+            install_dir=$(go env GOPATH)
+            if [[ "$platform" == windows-* ]]; then
+                install_dir=${install_dir%%;*}
+            else
+                install_dir=${install_dir%%:*}
+            fi
+            install_dir="${install_dir}/bin"
+        fi
+    fi
+
+    install_dir=${install_dir:-"${HOME}/.local/bin"}
+    if [[ "$platform" == windows-* ]] && command -v cygpath >/dev/null 2>&1; then
+        install_dir=$(cygpath -u "$install_dir")
+    fi
+    if [[ "$install_dir" != /* ]]; then
+        install_dir="${PWD}/${install_dir}"
+    fi
+
+    printf '%s\n' "${install_dir%/}"
+}
+
+checksum_file() {
+    local path=$1
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$path" | awk '{print $1}'
+        return
+    fi
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$path" | awk '{print $1}'
+        return
+    fi
+
+    print_error '系统中未找到 SHA-256 校验工具'
+    return 1
+}
+
+install_binary() {
+    local tag=$1
+    local platform=$2
+    local install_dir=$3
     local binary_file="${BINARY_NAME}-${platform}"
-    if [[ "$platform" == windows* ]]; then
+    local release_url="https://github.com/${GITHUB_REPO}/releases/download/${tag}"
+
+    if [[ "$platform" == windows-* ]]; then
         binary_file="${binary_file}.exe"
     fi
 
-    local download_url="https://github.com/${GITHUB_REPO}/releases/download/${version}/${binary_file}"
+    INSTALL_TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/nexa-install.XXXXXX")
+    local downloaded_binary="${INSTALL_TEMP_DIR}/${binary_file}"
+    local checksums="${INSTALL_TEMP_DIR}/checksums.txt"
 
-    print_info "Downloading ${BINARY_NAME} ${version} for ${platform}..."
+    print_info "下载 ${BINARY_NAME} ${tag}（${platform}）"
+    if ! download -o "$checksums" "${release_url}/checksums.txt"; then
+        print_error "无法下载 ${tag} 的 checksums.txt，请选择包含完整校验文件的稳定发布版本"
+        return 1
+    fi
+    download -o "$downloaded_binary" "${release_url}/${binary_file}"
 
-    # Get GOPATH
-    local gopath
-    gopath=$(go env GOPATH)
-    if [ -z "$gopath" ]; then
-        print_error "GOPATH is not set. Please install Go first."
-        exit 1
+    local expected_checksum
+    local actual_checksum
+    expected_checksum=$(awk -v filename="$binary_file" '$2 == filename || $2 == "*" filename {print $1}' "$checksums")
+    if [[ ! "$expected_checksum" =~ ^[0-9a-f]{64}$ ]]; then
+        print_error "校验文件中 ${binary_file} 的记录缺失、重复或无效"
+        return 1
     fi
 
-    local install_dir="${gopath}/bin"
+    actual_checksum=$(checksum_file "$downloaded_binary")
+    if [[ "$actual_checksum" != "$expected_checksum" ]]; then
+        print_error "${binary_file} 的 SHA-256 校验失败"
+        return 1
+    fi
+
+    chmod 0755 "$downloaded_binary"
+    local downloaded_version
+    downloaded_version=$(read_version "$downloaded_binary")
+    if [[ "$downloaded_version" != "${tag#v}" ]]; then
+        print_error "下载的程序无法运行或版本不匹配，期望 ${tag#v}，实际 ${downloaded_version:-未知}，现有程序未被替换"
+        return 1
+    fi
+
     mkdir -p "$install_dir"
+    INSTALL_STAGED_DIR=$(mktemp -d "${install_dir}/.nexa-install.XXXXXX")
+    local staged_target="${INSTALL_STAGED_DIR}/${INSTALL_TARGET##*/}"
+    install -m 0755 "$downloaded_binary" "$staged_target"
+    mv -f -- "$staged_target" "$INSTALL_TARGET"
 
-    local target_file="${install_dir}/${BINARY_NAME}"
-    if [[ "$platform" == windows* ]]; then
-        target_file="${target_file}.exe"
-    fi
-
-    # Download the binary
-    if ! curl -fsSL -o "$target_file" "$download_url"; then
-        print_error "Failed to download ${binary_file} from ${download_url}"
-        exit 1
-    fi
-
-    # Make it executable
-    chmod +x "$target_file"
-
-    print_info "${BINARY_NAME} ${version} has been installed to ${target_file}"
+    print_info "已安装 ${downloaded_version} 到 ${INSTALL_TARGET}"
 }
 
-# Main installation logic
+report_path() {
+    local install_dir=$1
+    local active_binary
+
+    case ":$PATH:" in
+        *":${install_dir}:"*) ;;
+        *) print_warn "请将 ${install_dir} 加入 PATH" ;;
+    esac
+    active_binary=$(command -v "$BINARY_NAME" || true)
+    if [[ -n "$active_binary" && "$active_binary" != "$INSTALL_TARGET" ]]; then
+        print_warn "PATH 当前优先使用 ${active_binary}，本次安装目标为 ${INSTALL_TARGET}"
+    fi
+}
+
 main() {
-    print_info "Checking ${BINARY_NAME} installation..."
+    parse_args "$@"
+    trap cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
 
-    # Step 1: Check if nexa is already installed
-    local installed_version
-    installed_version=$(get_installed_version)
-    if [ -n "$installed_version" ]; then
-        print_info "Found installed version: ${installed_version}"
-    else
-        print_warn "${BINARY_NAME} is not installed or version cannot be determined"
-    fi
-
-    # Step 2: Get the latest release version from GitHub
-    print_info "Fetching the latest version from GitHub..."
+    local platform
+    local install_dir
+    local latest_tag
     local latest_version
-    latest_version=$(get_latest_version)
-    print_info "Latest version available: ${latest_version}"
-
-    # Step 3: Compare versions and install if necessary
-    if [ -z "$installed_version" ]; then
-        print_info "Installing ${BINARY_NAME} ${latest_version}..."
-        local platform
-        platform=$(detect_platform)
-        install_binary "$latest_version" "$platform"
-        print_info "Installation complete!"
-    elif version_lt "$installed_version" "$latest_version"; then
-        print_info "Upgrading from ${installed_version} to ${latest_version}..."
-        local platform
-        platform=$(detect_platform)
-        install_binary "$latest_version" "$platform"
-        print_info "Upgrade complete!"
-    else
-        print_info "${BINARY_NAME} is already up to date (${installed_version})"
+    platform=$(detect_platform)
+    install_dir=$(resolve_install_dir "$platform")
+    INSTALL_TARGET="${install_dir}/${BINARY_NAME}"
+    if [[ "$platform" == windows-* ]]; then
+        INSTALL_TARGET="${INSTALL_TARGET}.exe"
+    fi
+    if [[ -d "$INSTALL_TARGET" ]]; then
+        print_error "安装目标是目录：${INSTALL_TARGET}"
+        return 1
     fi
 
-    # Verify installation
-    print_info "Verifying installation..."
-    if command -v nexa >/dev/null 2>&1; then
-        nexa --version
+    if [[ -n "$INSTALL_VERSION" ]]; then
+        latest_tag="v${INSTALL_VERSION#v}"
     else
-        print_warn "Please add \$(go env GOPATH)/bin to your PATH"
+        latest_tag=$(get_latest_tag)
     fi
+    if ! is_stable_version "$latest_tag"; then
+        print_error "发布版本 ${latest_tag} 不支持安全自动安装，请在 https://github.com/${GITHUB_REPO}/releases 选择包含 checksums.txt 的 vX.Y.Z 版本，再用 --version 指定"
+        return 1
+    fi
+    latest_version=${latest_tag#v}
+
+    if [[ -e "$INSTALL_TARGET" || -L "$INSTALL_TARGET" ]] && ((INSTALL_FORCE == 0)); then
+        local installed_version
+        local installed_base
+        installed_version=$(read_version "$INSTALL_TARGET")
+        if ! installed_base=$(version_base "$installed_version"); then
+            print_error "无法识别 ${INSTALL_TARGET} 的版本，程序保持不变；确认覆盖时请使用 --force"
+            return 1
+        fi
+        if version_lt "$latest_version" "$installed_base"; then
+            print_error "目标版本 ${latest_version} 低于已安装版本 ${installed_version}，确认降级时请使用 --force"
+            return 1
+        fi
+        if [[ "${installed_version%%+*}" == "$latest_version" ]]; then
+            print_info "${INSTALL_TARGET} 已安装版本 ${installed_version}"
+            report_path "$install_dir"
+            return
+        fi
+    fi
+
+    install_binary "$latest_tag" "$platform" "$install_dir"
+    report_path "$install_dir"
 }
 
-main
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
+    main "$@"
+fi

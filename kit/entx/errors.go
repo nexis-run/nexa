@@ -7,5 +7,6 @@ package entx
 import "errors"
 
 var (
-	ErrHardDeleteForbidden = errors.New("禁止硬删除")
+	ErrHardDeleteForbidden        = errors.New("禁止硬删除")
+	ErrSoftDeleteQueryUnsupported = errors.New("查询生成代码不支持软删除过滤")
 )

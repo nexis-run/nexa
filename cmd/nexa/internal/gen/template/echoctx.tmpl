@@ -1,24 +1,20 @@
-{{- /*gotype: nexis.run/nexa/cmd/nexa/internal/base.DaoTemplateVariables*/ -}}
-// Copyright (C) {{ .Module }}. {{ .Year }}-present.
-//
-// Created at {{ .Date }}, by nexa cli.
-
+{{- /*gotype: nexis.run/nexa/cmd/nexa/internal/base.EchoCtxTemplateVariables*/ -}}
 package {{ .Package }}
 
 import (
 	"github.com/labstack/echo/v4"
-	"nexis.run/nexa/kit"
+	"nexis.run/nexa/kit/rest"
 )
 
 // {{ .Name }}Context {{ .Name }} 上下文
 type {{ .Name }}Context struct {
-	*Context
+	*rest.Context
 }
 
 // New{{ .Name }}Context 创建 {{ .Name }} 上下文
-func New{{ .Name }}Context(ctx *Context) *{{ .Name }}Context {
+func New{{ .Name }}Context(c echo.Context) *{{ .Name }}Context {
 	return &{{ .Name }}Context{
-		Context: ctx,
+		Context: rest.GetContext(c),
 	}
 }
 
@@ -28,7 +24,7 @@ func Get{{ .Name }}Context(c echo.Context) *{{ .Name }}Context {
 	case *{{ .Name }}Context:
 		return v
 	default:
-		return New{{ .Name }}Context(GetContext(c))
+		return New{{ .Name }}Context(c)
 	}
 }
 
@@ -37,21 +33,15 @@ func Get{{ .Name }}ContextBindingData[T any](c echo.Context) (*{{ .Name }}Contex
 	ctx := Get{{ .Name }}Context(c)
 	req := new(T)
 	ctx.BindValidate(req)
+
 	return ctx, req
 }
 
-// {{ .Name }}Middleware  {{ .Name }} 认证中间件
+// {{ .Name }}Middleware {{ .Name }} 上下文中间件
 func {{ .Name }}Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			baseCtx, ok := c.(*Context)
-			if !ok {
-				return kit.ErrInvalidContext
-			}
-
-			ctx := New{{ .Name }}Context(baseCtx)
-
-			return next(ctx)
+			return next(Get{{ .Name }}Context(c))
 		}
 	}
 }

@@ -6,31 +6,25 @@ package clara
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/segmentio/kafka-go"
 )
 
 type Reader struct {
-	topic   string
 	groupID string
-
-	clara  *Clara
-	reader *kafka.Reader
+	reader  *kafka.Reader
 }
 
 type MessageListener func(message kafka.Message, err error) error
-
-var _ = NewReader
 
 // NewReader 创建一个新的Kafka Reader
 func NewReader(brokers []string, topic, groupID string) *Reader {
 	c := New(brokers)
 
 	return &Reader{
-		topic:   topic,
 		groupID: groupID,
-		clara:   c,
 		reader: kafka.NewReader(kafka.ReaderConfig{
 			Brokers:  c.brokers,
 			Topic:    topic,
@@ -51,13 +45,36 @@ func (r *Reader) With(fn func(reader *kafka.Reader)) *Reader {
 
 // Listen 监听消息回调
 func (r *Reader) Listen(ctx context.Context, cb MessageListener) error {
-	// r.SetOffset(42) // 设置Offset
+	if cb == nil {
+		return errors.New("消息处理函数不能为空")
+	}
 
 	// 接收消息
 	for {
-		err := cb(r.reader.ReadMessage(ctx))
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		message, err := r.reader.FetchMessage(ctx)
+		if err != nil {
+			return errors.Join(err, cb(message, err))
+		}
+
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		err = cb(message, nil)
 		if err != nil {
 			return err
+		}
+
+		// 处理成功后提交 offset
+		if r.groupID != "" {
+			err = r.reader.CommitMessages(ctx, message)
+			if err != nil {
+				return err
+			}
 		}
 	}
 }

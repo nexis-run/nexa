@@ -11,12 +11,12 @@ import (
 
 // UnsafeBytes2String 将字节切片无拷贝转换为字符串
 func UnsafeBytes2String(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
 // UnsafeString2Bytes 将字符串无拷贝转换为字节切片
-func UnsafeString2Bytes(s string) (b []byte) {
-	return *(*[]byte)(unsafe.Pointer(&s))
+func UnsafeString2Bytes(s string) []byte {
+	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
 // StringsToUint64 字符串切片转为 uint64 切片，忽略转换失败的值

@@ -5,6 +5,7 @@
 package pulbus
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -38,4 +39,19 @@ func TestProducerOptions(t *testing.T) {
 	require.Equal(t, msg.DeliverAfter, duration)
 	require.NotNil(t, msg.SequenceID)
 	require.Equal(t, *msg.SequenceID, seqID)
+}
+
+func TestSendValidatesPayloadBeforeCreatingProducer(t *testing.T) {
+	bus := &Pulbus{}
+	err := bus.Send(context.Background(), "topic")
+	require.EqualError(t, err, "消息内容不能为空")
+
+	bus.closed = true
+	options := []ProducerOption{WithProducerKey("message"), WithProducerKey("reserved")}
+	err = bus.SendBytes(context.Background(), "topic", []byte("payload"), options[:1]...)
+	require.ErrorIs(t, err, ErrClosed)
+
+	message := &pulsar.ProducerMessage{}
+	options[1](message)
+	require.Equal(t, "reserved", message.Key)
 }

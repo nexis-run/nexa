@@ -5,64 +5,106 @@
 package logger
 
 import (
+	"context"
+	"errors"
 	"os"
+	"sync"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"nexis.run/nexa/kit"
 	"nexis.run/nexa/kit/configure"
 )
 
-func Setup(cfg *configure.Logger) {
+var (
+	setupMu           sync.Mutex
+	activeKafkaWriter *KafkaWriter
+	managedWriters    = make(map[*KafkaWriter]struct{})
+)
+
+func Setup(cfg *configure.Logger) (err error) {
+	if !cfg.IsValid() {
+		err = kit.ErrConfigInvalidLogger
+		return
+	}
+
 	var cores []zapcore.Core
+	var kafkaWriter *KafkaWriter
 
-	// 配置级别
-	consoleLevel := zap.NewAtomicLevelAt(zapcore.DebugLevel)
-	kafkaLevel := zap.NewAtomicLevelAt(zapcore.InfoLevel)
-
-	// 配置编码器 - 明确区分控制台和Kafka的编码器
-	consoleEncoder := ConsoleEncoder()
-
-	// 判断是否需要输出到控制台
-	shouldLogToConsole := cfg.Stdout || (cfg.Kafka == nil)
-	if shouldLogToConsole {
+	if cfg.Stdout {
 		consoleCore := zapcore.NewCore(
-			consoleEncoder,
-			zapcore.Lock(os.Stdout), // 明确使用控制台输出
-			consoleLevel,
+			ConsoleEncoder(),
+			zapcore.Lock(os.Stdout),
+			zapcore.DebugLevel,
 		)
 		cores = append(cores, consoleCore)
 	}
 
-	// 判断是否需要输出到Kafka
-	if cfg.Kafka != nil && len(cfg.Kafka.Brokers) > 0 && !cfg.Kafka.Disable {
-		// Kafka输出配置使用JSON格式 - 明确使用不同的配置
+	if cfg.Kafka != nil && !cfg.Kafka.Disable {
 		kafkaEncoderConfig := zap.NewProductionEncoderConfig()
 
 		kafkaEncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 		kafkaEncoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
 
 		kafkaEncoder := zapcore.NewJSONEncoder(kafkaEncoderConfig)
-		kafkaWriter := NewKafkaWriter(cfg.Kafka.Brokers, cfg.Kafka.Topic)
+		kafkaWriter = NewKafkaWriter(cfg.Kafka.Brokers, cfg.Kafka.Topic)
 
-		// 确保Kafka core只处理JSON格式的日志
 		kafkaCore := zapcore.NewCore(
 			kafkaEncoder,
-			zapcore.AddSync(kafkaWriter), // 使用AddSync包装
-			kafkaLevel,
+			zapcore.AddSync(kafkaWriter),
+			zapcore.InfoLevel,
 		)
 
 		cores = append(cores, kafkaCore)
 	}
 
-	// 组合所有cores
 	l := zap.New(zapcore.NewTee(cores...), zap.AddCaller())
 
-	// 设置日志名称
 	if cfg.Name != "" {
 		l = l.Named(cfg.Name)
 	}
 
-	// 替换全局logger
+	// 替换全局日志器，旧 writer 独立完成关闭
+	setupMu.Lock()
+	previous := activeKafkaWriter
+	activeKafkaWriter = kafkaWriter
+
+	if kafkaWriter != nil {
+		managedWriters[kafkaWriter] = struct{}{}
+	}
+
 	zap.ReplaceGlobals(l)
+	setupMu.Unlock()
+
+	if previous != nil {
+		previous.startClose()
+	}
+
+	return
+}
+
+// Close 停止所有在管 Kafka writer，等待当前及配置替换前的日志完成发送尝试
+func Close(ctx context.Context) (err error) {
+	setupMu.Lock()
+	writers := make([]*KafkaWriter, 0, len(managedWriters)+1)
+
+	for writer := range managedWriters {
+		writers = append(writers, writer)
+	}
+
+	if _, managed := managedWriters[activeKafkaWriter]; activeKafkaWriter != nil && !managed {
+		writers = append(writers, activeKafkaWriter)
+	}
+	setupMu.Unlock()
+
+	for _, writer := range writers {
+		writer.startClose()
+	}
+
+	for _, writer := range writers {
+		err = errors.Join(err, writer.waitClose(ctx))
+	}
+
+	return
 }

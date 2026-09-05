@@ -28,20 +28,35 @@ type Context struct {
 
 // NewContext 创建上下文
 func NewContext(app string, c echo.Context) *Context {
+	user, _ := c.Get(ContextKeyUser).(*rbac.User)
+
 	return &Context{
 		App:     app,
 		Context: c,
+		User:    user,
 	}
+}
+
+// NexaContext 返回基础上下文，支持嵌入 Context 的自定义类型
+func (c *Context) NexaContext() *Context {
+	return c
 }
 
 // GetContext 获取上下文
 func GetContext(c echo.Context) *Context {
-	switch v := c.(type) {
-	case *Context:
-		return v
-	default:
-		return NewContext("UNKNOWN", c)
+	if carrier, ok := c.(interface{ NexaContext() *Context }); ok {
+		return carrier.NexaContext()
 	}
+
+	return NewContext("UNKNOWN", c)
+}
+
+func ensureContext(c echo.Context) echo.Context {
+	if _, ok := c.(interface{ NexaContext() *Context }); ok {
+		return c
+	}
+
+	return GetContext(c)
 }
 
 // BindValidate 绑定并校验（失败时 panic，需配合 RecoverMiddleware 使用）
@@ -81,9 +96,18 @@ func (c *Context) SendResponse(params ...any) error {
 	encoder := sonic.ConfigDefault.NewEncoder(buffer)
 	encoder.SetEscapeHTML(false)
 
-	if err := encoder.Encode(NewResponse().SetParams(params...)); err != nil {
+	response := NewResponse().SetParams(params...)
+	if response.Code < http.StatusOK || response.Code > 599 {
+		return NewError(http.StatusInternalServerError, "无效的 HTTP 响应状态码")
+	}
+
+	if response.Code == http.StatusNoContent || response.Code == http.StatusNotModified {
+		return c.NoContent(response.Code)
+	}
+
+	if err := encoder.Encode(response); err != nil {
 		return err
 	}
 
-	return c.JSONBlob(http.StatusOK, buffer.Bytes())
+	return c.JSONBlob(response.Code, buffer.Bytes())
 }

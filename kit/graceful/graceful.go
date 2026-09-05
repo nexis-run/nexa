@@ -11,10 +11,10 @@ import (
 	"time"
 )
 
-// 防止静态检查工具误报
 var _ Gracefully = (*Server)(nil)
-var _ = Run
 
+// Gracefully 的 Start 完成初始化并启动后台服务后返回
+// Stop 在 Start 返回后调用，应响应传入上下文的截止时间
 type Gracefully interface {
 	Start()
 	Stop(ctx context.Context)
@@ -26,37 +26,43 @@ func (s *Server) Start() {}
 
 func (s *Server) Stop(_ context.Context) {}
 
-// Run 启动服务
-func Run(s Gracefully, opts ...Option) {
-	// 设置默认选项
-	o := &option{
-		timeout: 30 * time.Second, // 默认超时时间为30秒
+// Run 启动服务并等待 SIGINT 或 SIGTERM
+func Run(server Gracefully, opts ...Option) {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	// 首次取消后恢复系统信号处理，后续信号可中断关闭过程
+	stopHandler := context.AfterFunc(ctx, stop)
+	defer stopHandler()
+
+	RunContext(ctx, server, opts...)
+}
+
+// RunContext 完成初始化后等待上下文取消，再使用独立截止时间关闭服务
+func RunContext(ctx context.Context, server Gracefully, opts ...Option) {
+	if ctx.Err() != nil {
+		return
 	}
+
+	settings := &option{timeout: 30 * time.Second}
 
 	for _, opt := range opts {
-		opt.apply(o)
+		if opt != nil {
+			opt(settings)
+		}
 	}
 
-	sig, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	// 初始化与关闭串行，Stop 可以读取 Start 完成初始化的资源
+	server.Start()
+	<-ctx.Done()
+	shutdown := context.WithoutCancel(ctx)
 
-	// 启动服务
-	go s.Start()
-
-	// 当中断信号发生时，关闭服务器并返回
-	<-sig.Done()
-
-	// 收到信号后立即停止监听，避免第二次信号导致非预期行为
-	stop()
-
-	// 如果有设置超时时间，则使用该时间来优雅地关闭服务
-	ctx := context.Background()
-
-	if o.timeout > 0 {
+	if settings.timeout > 0 {
 		var cancel context.CancelFunc
 
-		ctx, cancel = context.WithTimeout(ctx, o.timeout)
+		shutdown, cancel = context.WithTimeout(shutdown, settings.timeout)
 		defer cancel()
 	}
 
-	s.Stop(ctx)
+	server.Stop(shutdown)
 }

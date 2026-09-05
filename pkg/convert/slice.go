@@ -4,17 +4,12 @@
 
 package convert
 
-// Reverse 返回一个反转切片, 原切片不变
-func Reverse[S ~[]E, E any](s S) S {
-	n := len(s)
-	if n == 0 {
-		return nil
-	}
+import "slices"
 
-	result := make(S, n)
-	for i, j := 0, n-1; i < n; i, j = i+1, j-1 {
-		result[i] = s[j]
-	}
+// Reverse 返回反转后的副本，保留 nil 与空切片的区别
+func Reverse[S ~[]E, E any](s S) S {
+	result := slices.Clone(s)
+	slices.Reverse(result)
 
 	return result
 }

@@ -6,48 +6,46 @@ package micro
 
 import (
 	"fmt"
-	"io"
 
-	kratoslog "github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport/grpc"
-	"go.uber.org/zap"
 )
-
-func init() {
-	// 关闭kratos日志
-	kratoslog.SetLogger(kratoslog.NewStdLogger(io.Discard))
-}
-
-// 防止静态检查工具误报
-var _ = Run
 
 type Handler func(s *grpc.Server)
 
-// Run 启动 gRPC 服务器
-func Run(app, address string, h Handler, opts ...grpc.ServerOption) (server *grpc.Server, ch chan error) {
-	ctx := NewContext(app)
-
+// New 创建 gRPC 服务器，调用方负责启动和关闭
+func New(address string, register Handler, opts ...grpc.ServerOption) (server *grpc.Server) {
 	opts = append([]grpc.ServerOption{
 		grpc.Address(address),
 		grpc.Middleware(
 			RecoverMiddleware(),
 		),
+		grpc.StreamInterceptor(RecoverStreamInterceptor()),
 	}, opts...)
 
 	server = grpc.NewServer(opts...)
 
-	h(server)
+	if register != nil {
+		register(server)
+	}
 
-	// 使用协程启动gRPC服务器
+	return
+}
+
+// Run 启动 gRPC 服务器，服务停止后关闭错误通道
+func Run(app, address string, register Handler, opts ...grpc.ServerOption) (server *grpc.Server, ch chan error) {
+	server = New(address, register, opts...)
+	ctx := NewContext(app)
+
+	// 在后台启动 gRPC 服务器
 	ch = make(chan error, 1)
 
 	go func() {
+		defer close(ch)
+
 		if err := server.Start(ctx); err != nil {
-			ch <- fmt.Errorf("gRPC 服务启动失败: %w", err)
+			ch <- fmt.Errorf("gRPC 服务启动失败：%w", err)
 		}
 	}()
-
-	zap.L().Info(fmt.Sprintf("⇨ gRPC server listening on %s", address))
 
 	return
 }

@@ -1,24 +1,28 @@
 {{- /*gotype: nexis.run/nexa/cmd/nexa/internal/base.DaoTemplateVariables*/ -}}
-// Copyright (C) {{ .Module }}. {{ .Year }}-present.
-//
-// Created at {{ .Date }}, by nexa cli.
-
 package {{ .Package }}
 
 import (
-    "{{ .EntPkgImport }}"
-    "{{ .EntPkgImport }}/{{ .NameLower }}"
+    ent "{{ .EntPkgImport }}"
+    _ "{{ .EntPkgImport }}/runtime"
 )
 
 type {{ .Name }}Dao struct {
     orm *ent.{{ .Name }}Client
 }
 
+{{if .OrmClient -}}
 func New{{ .Name }}() *{{ .Name }}Dao {
     return &{{ .Name }}Dao{
-        orm: {{ .OrmClient }}.{{ .Name }},
+        orm: ({{ .OrmClient }}).{{ .Name }},
     }
 }
+{{else -}}
+func New{{ .Name }}(client *ent.Client) *{{ .Name }}Dao {
+    return &{{ .Name }}Dao{
+        orm: client.{{ .Name }},
+    }
+}
+{{end}}
 
 // Tx 使用事务
 func (dao *{{ .Name }}Dao) Tx(tx *ent.Tx) *{{ .Name }}Dao {

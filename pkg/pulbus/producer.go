@@ -10,19 +10,15 @@ import (
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/bytedance/sonic"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 type ProducerOption func(*pulsar.ProducerMessage)
 
 // WithProducerKey 设置消息 Key
-// 的作用:
-// 1. 分区路由: 相同 Key 的消息发送到同一分区，保证顺序性
-// 2. 消息去重: 启用去重后，根据 Key 判断重复消息
-// 3. 压缩支持: Topic Compaction 时，相同 Key 只保留最新消息
-// 4. Key_Shared 模式: 相同 Key 的消息发送到同一 Consumer 实例
+// 消息路由与压缩行为：
+// 1. 分区路由：相同 Key 的消息发送到同一分区，保证顺序性
+// 2. Topic Compaction：相同 Key 只保留最新消息
+// 3. Key_Shared 模式：相同 Key 的消息发送到同一 Consumer 实例
 //
 // 使用示例:
 //
@@ -69,55 +65,95 @@ type Producer struct {
 	pulsar.Producer
 }
 
-// 生产日志记录
-func (producer *Producer) log(level zapcore.Level, message string, data pulsar.Message) {
-	b, _ := sonic.Marshal(data)
-	zap.L().Log(level, "[Pulsar Producer] "+message, zap.ByteString("message", b), zap.String("topic", producer.Topic()))
+type producerEntry struct {
+	ready    chan struct{}
+	producer pulsar.Producer
+	err      error
 }
 
-// getProducer 获取 Producer（使用 LoadOrStore 避免并发创建）
-func (bus *Pulbus) getProducer(topic string, opts pulsar.ProducerOptions) (pulsar.Producer, error) {
-	// 尝试从缓存中获取
-	if p, ok := bus.producers.Load(topic); ok {
-		return p.(pulsar.Producer), nil
+// getProducer 合并同一 Topic 的并发创建，不阻塞其他 Topic
+func (bus *Pulbus) getProducer(ctx context.Context, topic string) (pulsar.Producer, error) {
+	bus.lifecycleMu.Lock()
+	if bus.closed {
+		bus.lifecycleMu.Unlock()
+		return nil, ErrClosed
 	}
 
-	// 不存在则创建新的 producer
-	opts.Topic = topic
+	entry, exists := bus.producers[topic]
+	if !exists {
+		entry = &producerEntry{ready: make(chan struct{})}
 
-	producer, err := bus.client.CreateProducer(opts)
+		if bus.producers == nil {
+			bus.producers = make(map[string]*producerEntry)
+		}
+
+		bus.producers[topic] = entry
+		bus.creating.Add(1)
+	}
+	bus.lifecycleMu.Unlock()
+
+	if !exists {
+		go bus.createProducer(topic, entry)
+	}
+
+	select {
+	case <-entry.ready:
+		return entry.producer, entry.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-bus.closing:
+		return nil, ErrClosed
+	}
+}
+
+func (bus *Pulbus) createProducer(topic string, entry *producerEntry) {
+	defer bus.creating.Done()
+
+	producer, err := bus.client.CreateProducer(pulsar.ProducerOptions{Topic: topic})
+
+	bus.lifecycleMu.Lock()
+	if err == nil && bus.closed {
+		err = ErrClosed
+	}
+
+	entry.producer, entry.err = producer, err
 	if err != nil {
-		return nil, err
+		delete(bus.producers, topic)
+
+		entry.producer = nil
 	}
 
-	// 使用 LoadOrStore 原子操作，避免并发创建多个 producer
-	actual, loaded := bus.producers.LoadOrStore(topic, producer)
-	if loaded {
-		// 已存在其他 goroutine 创建的 producer，关闭当前的
+	close(entry.ready)
+	bus.lifecycleMu.Unlock()
+
+	if err != nil && producer != nil {
 		producer.Close()
-		return actual.(pulsar.Producer), nil
 	}
-
-	return producer, nil
 }
 
 // Send 发送消息到指定 Topic
 func (bus *Pulbus) Send(ctx context.Context, topic string, messageOpts ...ProducerOption) error {
-	producer, err := bus.getProducer(topic, pulsar.ProducerOptions{})
-	if err != nil {
-		return err
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 
 	msg := &pulsar.ProducerMessage{}
 
 	// 应用自定义选项
 	for _, opt := range messageOpts {
-		opt(msg)
+		if opt != nil {
+			opt(msg)
+		}
 	}
 
 	// 判定消息内容是否为空（Payload 和 Value 至少需要一个）
 	if msg.Payload == nil && msg.Value == nil {
 		return errors.New("消息内容不能为空")
+	}
+
+	producer, err := bus.getProducer(ctx, topic)
+	if err != nil {
+		return err
 	}
 
 	_, err = producer.Send(ctx, msg)
@@ -127,5 +163,9 @@ func (bus *Pulbus) Send(ctx context.Context, topic string, messageOpts ...Produc
 
 // SendBytes 发送消息到指定 Topic
 func (bus *Pulbus) SendBytes(ctx context.Context, topic string, b []byte, messageOpts ...ProducerOption) error {
-	return bus.Send(ctx, topic, append(messageOpts, WithPayload(b))...)
+	options := make([]ProducerOption, len(messageOpts)+1)
+	copy(options, messageOpts)
+	options[len(messageOpts)] = WithPayload(b)
+
+	return bus.Send(ctx, topic, options...)
 }

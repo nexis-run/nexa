@@ -6,7 +6,10 @@ package pulbus
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+
+	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
 )
 
 // 常用的 Namespace 配置
@@ -26,6 +29,7 @@ const (
 
 // TopicConfig Topic 配置
 type TopicConfig struct {
+	Domain    string // 持久化类型，空值表示 persistent
 	Tenant    string // 租户，默认 "public"
 	Namespace string // 命名空间，默认 "default"
 	Topic     string // Topic 名称
@@ -43,74 +47,109 @@ func DefaultTopicConfig(topic string) TopicConfig {
 }
 
 // FullName 返回完整的 Topic 路径
-// 例如: persistent://public/default/orders
+// 例如：persistent://public/default/orders
 func (tc TopicConfig) FullName() string {
-	if tc.Partition >= 0 {
-		return fmt.Sprintf("persistent://%s/%s/%s-partition-%d",
-			tc.Tenant, tc.Namespace, tc.Topic, tc.Partition)
+	domain := tc.Domain
+	if domain == "" {
+		domain = "persistent"
 	}
 
-	return fmt.Sprintf("persistent://%s/%s/%s",
-		tc.Tenant, tc.Namespace, tc.Topic)
+	return domain + "://" + tc.ShortName()
 }
 
 // ShortName 返回短名称（不带 persistent:// 前缀）
-// 例如: public/default/orders
+// 例如：public/default/orders
 func (tc TopicConfig) ShortName() string {
+	name := tc.NamespaceFullName() + "/" + tc.Topic
 	if tc.Partition >= 0 {
-		return fmt.Sprintf("%s/%s/%s-partition-%d",
-			tc.Tenant, tc.Namespace, tc.Topic, tc.Partition)
+		name += "-partition-" + strconv.Itoa(tc.Partition)
 	}
 
-	return fmt.Sprintf("%s/%s/%s",
-		tc.Tenant, tc.Namespace, tc.Topic)
+	return name
 }
 
 // NamespaceFullName 返回完整的 namespace 路径
-// 例如: public/default
+// 例如：public/default
 func (tc TopicConfig) NamespaceFullName() string {
 	return fmt.Sprintf("%s/%s", tc.Tenant, tc.Namespace)
 }
 
-// ParseTopic 解析 Topic 字符串
-// 支持以下格式:
-//   - "orders" -> public/default/orders
-//   - "tenant/namespace/topic" -> tenant/namespace/topic
-//   - "persistent://tenant/namespace/topic" -> tenant/namespace/topic
+// ParseTopic 解析 Topic 字符串，无效输入返回空 Topic
+// 需要区分解析错误时使用 ParseTopicName
 func ParseTopic(topic string) TopicConfig {
-	config := TopicConfig{
-		Tenant:    "public",
-		Namespace: "default",
-		Partition: -1,
-	}
-
-	// 去除 persistent:// 前缀
-	topic = strings.TrimPrefix(topic, "persistent://")
-	topic = strings.TrimPrefix(topic, "non-persistent://")
-	topic = strings.TrimSpace(topic)
-
-	if topic == "" {
-		return config
-	}
-
-	parts := strings.Split(topic, "/")
-
-	switch len(parts) {
-	case 1:
-		// 只有 topic 名称
-		config.Topic = parts[0]
-	case 2:
-		// namespace/topic
-		config.Namespace = parts[0]
-		config.Topic = parts[1]
-	case 3:
-		// tenant/namespace/topic
-		config.Tenant = parts[0]
-		config.Namespace = parts[1]
-		config.Topic = parts[2]
+	config, err := ParseTopicName(topic)
+	if err != nil {
+		return DefaultTopicConfig("")
 	}
 
 	return config
+}
+
+// ParseTopicName 解析简单名称、namespace/topic 和完整的三段式 Topic 名称
+func ParseTopicName(topic string) (config TopicConfig, err error) {
+	config = DefaultTopicConfig("")
+
+	topic = strings.TrimSpace(topic)
+	if topic == "" {
+		err = fmt.Errorf("主题名称不能为空")
+		return
+	}
+
+	domain := "persistent"
+
+	name := topic
+	if prefix, rest, found := strings.Cut(topic, "://"); found {
+		domain, name = prefix, rest
+	}
+
+	if domain != "persistent" && domain != "non-persistent" {
+		err = fmt.Errorf("不支持的 Topic 类型：%s", domain)
+		return
+	}
+
+	parts := strings.Split(name, "/")
+	if strings.Contains(topic, "://") && len(parts) != 3 {
+		err = fmt.Errorf("完整 Topic 名称必须包含 tenant/namespace/topic")
+		return
+	}
+
+	config.Domain = domain
+
+	switch len(parts) {
+	case 1:
+		config.Topic = parts[0]
+	case 2:
+		config.Namespace, config.Topic = parts[0], parts[1]
+	case 3:
+		config.Tenant, config.Namespace, config.Topic = parts[0], parts[1], parts[2]
+	default:
+		err = fmt.Errorf("主题名称必须是 topic、namespace/topic 或 tenant/namespace/topic")
+		return
+	}
+
+	_, err = utils.GetNameSpaceName(config.Tenant, config.Namespace)
+	if err != nil {
+		return
+	}
+
+	if index := strings.LastIndex(config.Topic, "-partition-"); index >= 0 {
+		suffix := config.Topic[index+len("-partition-"):]
+
+		config.Partition, err = strconv.Atoi(suffix)
+		if err != nil || config.Partition < 0 || strconv.Itoa(config.Partition) != suffix {
+			err = fmt.Errorf("无效的 Topic 分区号：%s", suffix)
+			return
+		}
+
+		config.Topic = config.Topic[:index]
+	}
+
+	if config.Topic == "" {
+		err = fmt.Errorf("主题名称不能为空")
+		return
+	}
+
+	return
 }
 
 // TopicBuilder Topic 构建器
@@ -129,13 +168,12 @@ func NewTopicBuilder(tenant, namespace string) *TopicBuilder {
 
 // Build 构建 Topic 完整路径
 func (tb *TopicBuilder) Build(topic string) string {
-	return fmt.Sprintf("persistent://%s/%s/%s", tb.tenant, tb.namespace, topic)
+	return tb.BuildPartitioned(topic, -1)
 }
 
 // BuildPartitioned 构建分区 Topic
 func (tb *TopicBuilder) BuildPartitioned(topic string, partition int) string {
-	return fmt.Sprintf("persistent://%s/%s/%s-partition-%d",
-		tb.tenant, tb.namespace, topic, partition)
+	return (TopicConfig{Tenant: tb.tenant, Namespace: tb.namespace, Topic: topic, Partition: partition}).FullName()
 }
 
 // Namespace 返回 namespace 完整路径

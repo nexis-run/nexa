@@ -4,31 +4,12 @@
 
 package clara
 
-import (
-	"strings"
-
-	cmap "github.com/orcaman/concurrent-map/v2"
-)
-
-var instances = cmap.New[*Clara]()
-
 type Clara struct {
 	brokers []string
-	writers cmap.ConcurrentMap[string, *Writer]
 }
 
 func New(brokers []string) *Clara {
-	key := strings.Join(brokers, ",")
-	if instance, exists := instances.Get(key); exists {
-		return instance
+	return &Clara{
+		brokers: append([]string(nil), brokers...),
 	}
-
-	c := &Clara{
-		brokers: brokers,
-		writers: cmap.New[*Writer](),
-	}
-
-	instances.Set(key, c)
-
-	return c
 }

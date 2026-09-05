@@ -5,33 +5,26 @@
 package configure
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"math"
 	"os"
-	"time"
+	"reflect"
+	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
-	"github.com/sony/sonyflake/v2"
+	"gopkg.in/yaml.v3"
 
 	"nexis.run/nexa/kit"
 )
 
-func init() {
-	// 设置全局时区
-	tz := "Asia/Shanghai"
-
-	_ = os.Setenv("TZ", tz)
-
-	loc, _ := time.LoadLocation(tz)
-
-	time.Local = loc
-}
-
 type Configure struct {
-	App         string          // 应用名称
-	Environment kit.Environment // 环境变量
-	Logger      *Logger         // 日志配置
+	App                string          // 应用名称
+	Environment        kit.Environment // 环境变量
+	Logger             *Logger         // 日志配置
+	SonyflakeMachineID *int            `koanf:"sonyflake_machine_id"` // 同一 ID 空间内唯一的进程编号，范围为 0~65535
 }
 
 type Configurable interface {
@@ -57,90 +50,145 @@ type Logger struct {
 
 	Stdout bool // 是否输出到控制台
 
-	// 输出至kafka
+	// 输出至 Kafka
 	Kafka *LoggerKafka
 }
 
 type LoggerKafka struct {
-	Disable bool     // 是否禁用kafka日志输出
-	Topic   string   // kafka topic
-	Brokers []string // kafka brokers
+	Disable bool     // 是否禁用 Kafka 日志输出
+	Topic   string   // Kafka topic
+	Brokers []string // Kafka brokers
 }
 
-func (l *Logger) IsVaild() (vaild bool) {
+func (l *Logger) IsValid() (valid bool) {
 	if l == nil {
 		return
 	}
 
-	// 如果没有配置 stdout 和 kafka / kafka未启用，则无效
-	if !l.Stdout && (l.Kafka == nil || l.Kafka.Disable) {
+	if l.Kafka == nil || l.Kafka.Disable {
+		return l.Stdout
+	}
+
+	if strings.TrimSpace(l.Kafka.Topic) == "" || len(l.Kafka.Brokers) == 0 {
 		return
 	}
 
-	// 如果配置了kafka，topic和name不能为空
-	if l.Kafka != nil {
-		return l.Kafka.Topic != "" && len(l.Kafka.Brokers) > 0
+	for _, broker := range l.Kafka.Brokers {
+		if strings.TrimSpace(broker) == "" {
+			return
+		}
 	}
 
 	return true
 }
 
+// Load 读取单个 YAML 配置，使用 koanf 标签、嵌入字段和类型转换钩子
 func Load[T Configurable](p string) (c T, err error) {
-	k := koanf.New(".")
-	f := file.Provider(p)
+	var content []byte
 
-	err = k.Load(f, yaml.Parser())
+	content, err = os.ReadFile(p)
+	if err != nil {
+		err = fmt.Errorf("读取配置 %s 失败：%w", p, err)
+		return
+	}
+
+	var values map[string]any
+	parser := yaml.NewDecoder(bytes.NewReader(content))
+
+	err = parser.Decode(&values)
+	if err != nil {
+		err = fmt.Errorf("解析配置 %s 失败：%w", p, err)
+		return
+	}
+
+	if len(values) == 0 {
+		err = kit.ErrConfigMissName
+		return
+	}
+
+	var extra any
+
+	err = parser.Decode(&extra)
+	if !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errors.New("配置文件只能包含一个 YAML 文档")
+		}
+
+		return
+	}
+
+	var decoder *mapstructure.Decoder
+
+	decoder, err = mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName: "koanf",
+		Result:  &c,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			validateIntegerConversion,
+			mapstructure.StringToTimeDurationHookFunc(),
+			mapstructure.StringToSliceHookFunc(","),
+			mapstructure.TextUnmarshallerHookFunc()),
+		WeaklyTypedInput: true,
+		Squash:           true,
+	})
 	if err != nil {
 		return
 	}
 
-	err = k.UnmarshalWithConf(
-		"",
-		&c,
-		koanf.UnmarshalConf{
-			Tag: "koanf",
-			DecoderConfig: &mapstructure.DecoderConfig{
-				DecodeHook: mapstructure.ComposeDecodeHookFunc(
-					mapstructure.StringToTimeDurationHookFunc(),
-					mapstructure.StringToSliceHookFunc(","),
-					mapstructure.TextUnmarshallerHookFunc()),
-				Metadata:         nil,
-				Result:           &c,
-				WeaklyTypedInput: true,
-				Squash:           true,
-			},
-		},
-	)
+	err = decoder.Decode(values)
+	if err != nil {
+		return
+	}
 
-	if c.GetApp() == "" {
+	if strings.TrimSpace(c.GetApp()) == "" {
 		err = kit.ErrConfigMissName
+		return
 	}
 
 	if c.GetEnvironment() == "" || !c.GetEnvironment().IsValid() {
 		err = kit.ErrConfigMissEnvironment
+		return
 	}
 
 	if c.GetLogger() == nil {
 		err = kit.ErrConfigMissLogger
+		return
+	}
+
+	if !c.GetLogger().IsValid() {
+		err = kit.ErrConfigInvalidLogger
 	}
 
 	return
 }
 
-// Sonyflake 创建sonyflake实例
-func (c Configure) Sonyflake() (*sonyflake.Sonyflake, error) {
-	id := 1103
-
-	switch c.Environment {
-	case kit.Production:
-		id = 1101
-	case kit.Development:
-		id = 1102
+// validateIntegerConversion 拒绝浮点数到整数字段的截断和溢出
+func validateIntegerConversion(from, to reflect.Value) (any, error) {
+	if from.Kind() != reflect.Float32 && from.Kind() != reflect.Float64 {
+		return from.Interface(), nil
 	}
 
-	return sonyflake.New(sonyflake.Settings{
-		MachineID: func() (int, error) {
-			return id, nil
-		},
-	})
+	kind := to.Kind()
+	if kind < reflect.Int || kind > reflect.Uint64 {
+		return from.Interface(), nil
+	}
+
+	number := from.Float()
+	upper := math.Ldexp(1, to.Type().Bits())
+	lower := 0.0
+
+	if kind <= reflect.Int64 {
+		upper /= 2
+		lower = -upper
+	}
+
+	if math.IsNaN(number) || math.Trunc(number) != number || number < lower || number >= upper {
+		return nil, fmt.Errorf("%v 不能无损转换为 %s", number, to.Type())
+	}
+
+	return from.Interface(), nil
+}
+
+// IsVaild 检查日志配置是否合法
+func (l *Logger) IsVaild() bool {
+	return l.IsValid()
 }

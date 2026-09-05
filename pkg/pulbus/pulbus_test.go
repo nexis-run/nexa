@@ -1,3 +1,5 @@
+//go:build integration
+
 // Copyright (C) nexa. 2026-present.
 //
 // Created at 2026-01-28, by liasica
@@ -6,17 +8,26 @@ package pulbus
 
 import (
 	"context"
-	"fmt"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/apache/pulsar-client-go/pulsaradmin/pkg/utils"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPulbus(t *testing.T) {
-	bus, err := New("pulsar://10.10.10.220:36650", WithAdmin("http://10.10.10.220:36651"))
+	bookie := os.Getenv("PULSAR_URL")
+	adminURL := os.Getenv("PULSAR_ADMIN_URL")
+	if bookie == "" || adminURL == "" {
+		t.Skip("PULSAR_URL 和 PULSAR_ADMIN_URL 未设置")
+	}
+
+	bus, err := New(bookie, WithAdmin(adminURL))
 	require.NoError(t, err)
+	defer bus.Close()
 
 	admin := bus.GetAdmin()
 	require.NotNil(t, admin)
@@ -25,27 +36,37 @@ func TestPulbus(t *testing.T) {
 
 	policies, err = admin.Namespaces().GetRetention(DefaultNamespace)
 	require.NoError(t, err)
-	fmt.Printf("Retention policies for namespace %s: %+v\n", DefaultNamespace, policies)
+	require.NotNil(t, policies)
 }
 
 func TestConsume(t *testing.T) {
-	bus, err := New("pulsar://10.10.10.220:36650")
-	require.NoError(t, err)
+	bookie := os.Getenv("PULSAR_URL")
+	if bookie == "" {
+		t.Skip("PULSAR_URL 未设置")
+	}
 
-	defer bus.client.Close()
+	bus, err := New(bookie)
+	require.NoError(t, err)
+	defer bus.Close()
 
 	var consumer pulsar.Consumer
-
+	topic := "nexa-integration-" + uuid.NewString()
 	consumer, err = bus.client.Subscribe(pulsar.ConsumerOptions{
-		Topic:            "test-Topic",
-		SubscriptionName: "test-sub",
+		Topic:            topic,
+		SubscriptionName: "nexa-integration-" + uuid.NewString(),
 		Type:             pulsar.Shared,
 	})
 	require.NoError(t, err)
+	defer consumer.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	err = bus.SendBytes(ctx, topic, []byte("test-message"))
+	require.NoError(t, err)
 
 	var msg pulsar.Message
-
-	msg, err = consumer.Receive(context.Background())
+	msg, err = consumer.Receive(ctx)
 	require.NoError(t, err)
-	fmt.Printf("Received message msgId: %#v -- content: '%s'\n", msg.ID(), string(msg.Payload()))
+	require.Equal(t, "test-message", string(msg.Payload()))
 }

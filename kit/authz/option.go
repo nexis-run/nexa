@@ -32,8 +32,6 @@ func (f optionFunc) apply(c *option) {
 	f(c)
 }
 
-var _ = WithErrorHandler
-
 // WithErrorHandler 设置错误处理
 func WithErrorHandler(f func(err error) error) Option {
 	return optionFunc(func(c *option) {

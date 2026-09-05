@@ -6,6 +6,7 @@ package rest
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
@@ -20,6 +21,10 @@ type HTMLTemplate struct {
 }
 
 func (t *HTMLTemplate) Render(w io.Writer, name string, data interface{}, _ echo.Context) error {
+	if t == nil || t.Templates[name] == nil {
+		return fmt.Errorf("HTML 模板不存在：%s", name)
+	}
+
 	return t.Templates[name].ExecuteTemplate(w, name, data)
 }
 

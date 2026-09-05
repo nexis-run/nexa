@@ -5,18 +5,32 @@
 package pulbus
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"go.uber.org/zap"
 )
 
-type Pulbus struct {
-	client pulsar.Client
-	admin  *Admin
+var ErrClosed = errors.New("消息客户端已关闭")
 
-	producers sync.Map // map[Topic]pulsar.Producer - 缓存 producer，避免重复创建
-	consumers sync.Map // map[ConsumerKey]pulsar.Consumer - 缓存 consumer，避免重复创建
+type Pulbus struct {
+	client        pulsar.Client
+	admin         *Admin
+	clientOptions pulsar.ClientOptions
+	initErr       error
+
+	producers map[string]*producerEntry
+	consumers map[*Consumer]struct{}
+
+	lifecycleMu sync.Mutex
+	creating    sync.WaitGroup
+	closeOnce   sync.Once
+	closing     chan struct{}
+	closeDone   chan struct{}
+	closed      bool
 }
 
 // Option Pulbus 配置选项
@@ -27,7 +41,7 @@ func WithAdmin(webServiceURL string, opts ...AdminOption) Option {
 	return func(bus *Pulbus) {
 		admin, err := NewAdmin(webServiceURL, opts...)
 		if err != nil {
-			zap.L().Error("Pulsar Admin 创建失败", zap.String("webServiceURL", webServiceURL), zap.Error(err))
+			bus.initErr = errors.Join(bus.initErr, fmt.Errorf("创建 Pulsar Admin 失败：%w", err))
 			return
 		}
 
@@ -35,25 +49,40 @@ func WithAdmin(webServiceURL string, opts ...AdminOption) Option {
 	}
 }
 
-func New(bookie string, opts ...Option) (bus *Pulbus, err error) {
-	var client pulsar.Client
-
-	client, err = pulsar.NewClient(pulsar.ClientOptions{
-		URL: bookie,
-	})
-	if err != nil {
-		return
+// WithClientOptions 配置认证、TLS 和连接超时，连接地址由 New 的参数指定
+func WithClientOptions(options pulsar.ClientOptions) Option {
+	return func(bus *Pulbus) {
+		bus.clientOptions = options
 	}
+}
 
+func New(bookie string, opts ...Option) (bus *Pulbus, err error) {
 	bus = &Pulbus{
-		client:    client,
-		producers: sync.Map{},
-		consumers: sync.Map{},
+		producers: make(map[string]*producerEntry),
+		consumers: make(map[*Consumer]struct{}),
+		closing:   make(chan struct{}),
+		closeDone: make(chan struct{}),
 	}
 
 	// 应用选项
 	for _, opt := range opts {
-		opt(bus)
+		if opt != nil {
+			opt(bus)
+		}
+	}
+
+	if bus.initErr != nil {
+		err = bus.initErr
+		bus = nil
+
+		return
+	}
+
+	bus.clientOptions.URL = bookie
+
+	bus.client, err = pulsar.NewClient(bus.clientOptions)
+	if err != nil {
+		bus = nil
 	}
 
 	return
@@ -61,27 +90,55 @@ func New(bookie string, opts ...Option) (bus *Pulbus, err error) {
 
 // Close 关闭所有 producers、consumers 和 client
 func (bus *Pulbus) Close() {
-	// 关闭所有 producers
-	bus.producers.Range(func(key, value interface{}) bool {
-		if producer, ok := value.(pulsar.Producer); ok {
-			zap.L().Info("[Pulsar] 关闭 Producer", zap.String("topic", producer.Topic()))
-			producer.Close()
-		}
-		bus.producers.Delete(key)
+	_ = bus.CloseContext(context.Background())
+}
 
-		return true
+// CloseContext 停止创建资源并通知消费退出，ctx 只限制调用方等待资源释放的时间
+func (bus *Pulbus) CloseContext(ctx context.Context) (err error) {
+	bus.closeOnce.Do(func() {
+		bus.lifecycleMu.Lock()
+		bus.closed = true
+		close(bus.closing)
+		bus.lifecycleMu.Unlock()
+
+		go bus.finishClose()
 	})
 
-	// 关闭所有 consumers
-	bus.consumers.Range(func(key, value interface{}) bool {
-		if consumer, ok := value.(*Consumer); ok {
-			zap.L().Info("[Pulsar] 关闭 Consumer", zap.String("topic", consumer.key.Topic), zap.String("subscription", consumer.key.Subscription))
-			consumer.Close()
-		}
-		bus.consumers.Delete(key)
+	select {
+	case <-bus.closeDone:
+		return
+	default:
+	}
 
-		return true
-	})
+	select {
+	case <-bus.closeDone:
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
+
+	return
+}
+
+func (bus *Pulbus) finishClose() {
+	defer close(bus.closeDone)
+	bus.creating.Wait()
+
+	bus.lifecycleMu.Lock()
+	producers := bus.producers
+	bus.producers = nil
+	consumers := bus.consumers
+	bus.consumers = nil
+	bus.lifecycleMu.Unlock()
+
+	for topic, entry := range producers {
+		zap.L().Info("[Pulsar] 关闭 Producer", zap.String("topic", topic))
+		entry.producer.Close()
+	}
+
+	for consumer := range consumers {
+		zap.L().Info("[Pulsar] 关闭 Consumer", zap.String("topic", consumer.key.Topic), zap.String("subscription", consumer.key.Subscription))
+		consumer.Close()
+	}
 
 	// 关闭 client
 	bus.client.Close()

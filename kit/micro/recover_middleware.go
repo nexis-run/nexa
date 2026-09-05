@@ -6,11 +6,12 @@ package micro
 
 import (
 	"context"
-	"fmt"
-	"runtime"
 
 	"github.com/go-kratos/kratos/v2/middleware"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func RecoverMiddleware() middleware.Middleware {
@@ -18,18 +19,35 @@ func RecoverMiddleware() middleware.Middleware {
 		return func(ctx context.Context, req any) (reply any, err error) {
 			defer func() {
 				if r := recover(); r != nil {
-					buf := make([]byte, 64<<10) //nolint:mnd
-					n := runtime.Stack(buf, false)
-
-					buf = buf[:n]
-					zap.L().Error("捕获gRPC未处理崩溃", zap.Reflect("request", req), zap.Any("panic", r), zap.String("stack", string(buf)))
-
-					// 将 panic 转为 error 返回, 避免调用方收到 (nil, nil) 误判成功
-					err = fmt.Errorf("panic recovered: %v", r)
+					reply = nil
+					err = panicError(r)
 				}
 			}()
 
-			return handler(ctx, req)
+			reply, err = handler(ctx, req)
+
+			return
 		}
 	}
+}
+
+// RecoverStreamInterceptor 保护完整的流处理过程，可与自定义流拦截器组合
+func RecoverStreamInterceptor() grpc.StreamServerInterceptor {
+	return func(server any, stream grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = panicError(r)
+			}
+		}()
+
+		err = handler(server, stream)
+
+		return
+	}
+}
+
+func panicError(value any) error {
+	zap.L().Error("捕获 gRPC 未处理崩溃", zap.Any("panic", value), zap.Stack("stack"))
+
+	return status.Error(codes.Internal, "Internal Server Error")
 }

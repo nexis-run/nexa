@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"nexis.run/nexa/kit"
 	"nexis.run/nexa/kit/configure"
 )
 
@@ -26,18 +27,21 @@ func TestLogger(t *testing.T) {
 	ld.Info("test")
 	ld.Named("xtest").Info("test")
 
-	Setup(&configure.Logger{
+	err = Setup(&configure.Logger{
 		Name:   "test-log",
 		Stdout: true,
-		Kafka: &configure.LoggerKafka{
-			Topic: "applog",
-			Brokers: []string{
-				"10.10.10.200:32420",
-				"10.10.10.200:32421",
-				"10.10.10.200:32422",
-			},
-		},
 	})
+	require.NoError(t, err)
 
-	zap.L().Info("KAFKA test")
+	zap.L().Info("test")
+}
+
+func TestSetupRejectsInvalidConfiguration(t *testing.T) {
+	previous := zap.L()
+	err := Setup(nil)
+	require.ErrorIs(t, err, kit.ErrConfigInvalidLogger)
+
+	err = Setup(&configure.Logger{Kafka: &configure.LoggerKafka{Disable: true}})
+	require.ErrorIs(t, err, kit.ErrConfigInvalidLogger)
+	require.Same(t, previous, zap.L())
 }

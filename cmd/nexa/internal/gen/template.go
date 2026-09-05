@@ -7,34 +7,30 @@ package gen
 import (
 	"bytes"
 	"embed"
+	"sync"
 	"text/template"
 )
 
 var (
 	//go:embed template/*
-	templateFS embed.FS
+	templateFS      embed.FS
+	parsedTemplates = sync.OnceValues(func() (*template.Template, error) {
+		return template.New("nexa").Option("missingkey=error").ParseFS(templateFS, "template/*.tmpl")
+	})
 )
 
 // RenderTemplate 渲染模板
 func RenderTemplate(templateName string, data any) (b []byte, err error) {
-	var tmpl []byte
-
-	tmpl, err = templateFS.ReadFile("template/" + templateName)
-	if err != nil {
-		return
-	}
-
-	// 创建模板并解析
 	var t *template.Template
 
-	t, err = template.New(templateName).Parse(string(tmpl))
+	t, err = parsedTemplates()
 	if err != nil {
 		return
 	}
 
 	// 渲染模板
 	var buf bytes.Buffer
-	if err = t.Execute(&buf, data); err != nil {
+	if err = t.ExecuteTemplate(&buf, templateName, data); err != nil {
 		return
 	}
 

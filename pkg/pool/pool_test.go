@@ -8,9 +8,22 @@ import (
 	"bytes"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 var l = 10000
+
+func TestPoolZeroValueAndFactory(t *testing.T) {
+	var values Pool[int]
+	require.Zero(t, values.Get())
+	require.Nil(t, NewPool[any](nil).Get())
+	require.Nil(t, NewPool[any](func() any { return nil }).Get())
+	require.Equal(t, "new", NewPool(func() string { return "new" }).Get())
+	values.Put(7)
+	value := values.Get()
+	require.Contains(t, []int{0, 7}, value)
+}
 
 func fillBuffer(b *bytes.Buffer) {
 	for i := 0; i < l; i++ {

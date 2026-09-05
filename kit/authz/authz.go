@@ -7,8 +7,8 @@ package authz
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -16,13 +16,15 @@ import (
 	"gopkg.auroraride.com/rbac"
 )
 
-var (
-	instance  rbac.RBACServiceClient
-	conn      *grpc.ClientConn
-	setupOnce sync.Once
-)
+var defaultClient atomic.Pointer[Client]
 
-var _ = Setup
+type Client struct {
+	instance rbac.RBACServiceClient
+	conn     *grpc.ClientConn
+
+	closeOnce sync.Once
+	closeErr  error
+}
 
 // SetupOption 初始化选项
 type SetupOption func(*setupConfig)
@@ -33,88 +35,183 @@ type setupConfig struct {
 
 // WithTransportCredentials 设置 gRPC 传输凭证（TLS）
 func WithTransportCredentials(creds credentials.TransportCredentials) SetupOption {
-	return func(c *setupConfig) {
-		c.creds = creds
+	return func(config *setupConfig) {
+		config.creds = creds
 	}
 }
 
-// Setup 初始化 rbac gRPC 客户端
-// 如果初始化失败, 会直接抛出致命错误
-func Setup(address string, opts ...SetupOption) {
-	setupOnce.Do(func() {
-		cfg := &setupConfig{
-			creds: insecure.NewCredentials(),
-		}
+// New 创建 rbac gRPC 客户端
+func New(address string, opts ...SetupOption) (client *Client, err error) {
+	config := &setupConfig{
+		creds: insecure.NewCredentials(),
+	}
 
-		for _, opt := range opts {
-			opt(cfg)
-		}
+	for _, opt := range opts {
+		opt(config)
+	}
 
-		var err error
+	var conn *grpc.ClientConn
 
-		conn, err = grpc.NewClient(address, grpc.WithTransportCredentials(cfg.creds))
-		if err != nil {
-			zap.L().Fatal("rbac rpc连接失败", zap.Error(err))
-			return
-		}
+	conn, err = grpc.NewClient(address, grpc.WithTransportCredentials(config.creds))
+	if err != nil {
+		return
+	}
 
-		instance = rbac.NewRBACServiceClient(conn)
+	client = &Client{
+		instance: rbac.NewRBACServiceClient(conn),
+		conn:     conn,
+	}
+
+	return
+}
+
+// Setup 替换默认 rbac gRPC 客户端
+func Setup(address string, opts ...SetupOption) (err error) {
+	var client *Client
+
+	client, err = New(address, opts...)
+	if err != nil {
+		return
+	}
+
+	previous := defaultClient.Swap(client)
+	if previous != nil {
+		err = previous.Close()
+	}
+
+	return
+}
+
+// Close 关闭默认 gRPC 客户端
+func Close() (err error) {
+	client := defaultClient.Swap(nil)
+	if client == nil {
+		return
+	}
+
+	err = client.Close()
+
+	return
+}
+
+// Close 关闭 gRPC 客户端
+func (client *Client) Close() (err error) {
+	client.closeOnce.Do(func() {
+		client.closeErr = client.conn.Close()
 	})
-}
 
-// Close 关闭 gRPC 连接
-func Close() error {
-	if conn != nil {
-		return conn.Close()
-	}
+	err = client.closeErr
 
-	return nil
+	return
 }
 
 // GetRBACContext 取得权限服务上下文并添加认证信息
 func GetRBACContext(ctx context.Context, token string) context.Context {
-	return metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{"Authorization": "Bearer " + token}))
+	outgoing, _ := metadata.FromOutgoingContext(ctx)
+	outgoing = outgoing.Copy()
+	outgoing.Set("authorization", "Bearer "+token)
+
+	return metadata.NewOutgoingContext(ctx, outgoing)
 }
 
 // GetRestrictedUser 检查权限
-func GetRestrictedUser(ctx context.Context, token string, projectCode string, permissionKey string, opts ...Option) (*rbac.GetRestrictedUserResponse, error) {
-	o := defaultOption
+func GetRestrictedUser(
+	ctx context.Context,
+	token string,
+	projectCode string,
+	permissionKey string,
+	opts ...Option,
+) (response *rbac.GetRestrictedUserResponse, err error) {
+	client := defaultClient.Load()
+	if client == nil {
+		err = ErrNotInitialized
+		return
+	}
+
+	response, err = client.GetRestrictedUser(
+		ctx,
+		token,
+		projectCode,
+		permissionKey,
+		opts...,
+	)
+
+	return
+}
+
+// GetRestrictedUser 检查权限
+func (client *Client) GetRestrictedUser(
+	ctx context.Context,
+	token string,
+	projectCode string,
+	permissionKey string,
+	opts ...Option,
+) (response *rbac.GetRestrictedUserResponse, err error) {
+	settings := defaultOption
 
 	for _, opt := range opts {
-		opt.apply(&o)
+		opt.apply(&settings)
 	}
 
-	res, err := instance.GetRestrictedUser(GetRBACContext(ctx, token), &rbac.GetRestrictedUserRequest{
-		PermissionKey: permissionKey,
-		ProjectCode:   rbac.GetProjectCode(projectCode),
-	})
+	response, err = client.instance.GetRestrictedUser(
+		GetRBACContext(ctx, token),
+		&rbac.GetRestrictedUserRequest{
+			PermissionKey: permissionKey,
+			ProjectCode:   rbac.GetProjectCode(projectCode),
+		},
+	)
 
-	if o.errorHandler != nil {
-		err = o.errorHandler(err)
+	if settings.errorHandler != nil {
+		err = settings.errorHandler(err)
 	}
 
-	return res, err
+	if err == nil && response == nil {
+		err = ErrEmptyResponse
+	}
+
+	return
 }
 
 // GetUser 获取用户信息
-func GetUser(ctx context.Context, uid string, opts ...Option) (*rbac.User, error) {
-	o := defaultOption
-
-	for _, opt := range opts {
-		opt.apply(&o)
+func GetUser(ctx context.Context, uid string, opts ...Option) (user *rbac.User, err error) {
+	client := defaultClient.Load()
+	if client == nil {
+		err = ErrNotInitialized
+		return
 	}
 
-	res, err := instance.GetUser(ctx, &rbac.GetUserRequest{
+	user, err = client.GetUser(ctx, uid, opts...)
+
+	return
+}
+
+// GetUser 获取用户信息
+func (client *Client) GetUser(ctx context.Context, uid string, opts ...Option) (user *rbac.User, err error) {
+	settings := defaultOption
+
+	for _, opt := range opts {
+		opt.apply(&settings)
+	}
+
+	var response *rbac.GetUserResponse
+	response, err = client.instance.GetUser(ctx, &rbac.GetUserRequest{
 		Uid: uid,
 	})
 
-	if o.errorHandler != nil {
-		err = o.errorHandler(err)
+	if settings.errorHandler != nil {
+		err = settings.errorHandler(err)
 	}
 
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	return res.UserInfo, nil
+	if response == nil {
+		err = ErrEmptyResponse
+		return
+	}
+
+	user = response.UserInfo
+
+	return
 }

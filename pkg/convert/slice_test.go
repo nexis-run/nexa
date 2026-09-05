@@ -16,6 +16,9 @@ func TestReverse(t *testing.T) {
 	reversed := Reverse(s)
 	expected := []int{5, 4, 3, 2, 1}
 	require.EqualValues(t, expected, reversed)
+	require.Equal(t, []int{1, 2, 3, 4, 5}, s)
+	require.Nil(t, Reverse([]int(nil)))
+	require.NotNil(t, Reverse([]int{}))
 
 	slices.Reverse(s)
 	require.EqualValues(t, expected, s)

@@ -7,21 +7,13 @@ package graceful
 import "time"
 
 type option struct {
-	timeout time.Duration // 优雅停止超时时间, 若小于等于0则不设置超时
+	timeout time.Duration // 关闭超时时间，小于等于 0 时不设置截止时间
 }
 
-type Option interface {
-	apply(*option)
-}
-
-type optionFunc func(*option)
-
-func (f optionFunc) apply(c *option) {
-	f(c)
-}
+type Option func(*option)
 
 func WithTimeout(d time.Duration) Option {
-	return optionFunc(func(c *option) {
+	return func(c *option) {
 		c.timeout = d
-	})
+	}
 }

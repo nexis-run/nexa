@@ -9,17 +9,16 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-var _ = (*DefaultJSONSerializer)(nil)
+var _ echo.JSONSerializer = (*DefaultJSONSerializer)(nil)
 
-// DefaultJSONSerializer implements JSON encoding using encoding/jsoniter.
+// DefaultJSONSerializer 使用 Sonic 编解码 JSON
 type DefaultJSONSerializer struct{}
 
 func NewDefaultJSONSerializer() *DefaultJSONSerializer {
 	return &DefaultJSONSerializer{}
 }
 
-// Serialize converts an interface into a json and writes it to the response.
-// You can optionally use the indent parameter to produce pretty JSONs.
+// Serialize 将 JSON 写入响应，indent 非空时使用缩进
 func (d DefaultJSONSerializer) Serialize(c echo.Context, i any, indent string) error {
 	enc := sonic.ConfigDefault.NewEncoder(c.Response())
 
@@ -30,8 +29,7 @@ func (d DefaultJSONSerializer) Serialize(c echo.Context, i any, indent string) e
 	return enc.Encode(i)
 }
 
-// Deserialize reads a JSON from a request body and converts it into an interface.
+// Deserialize 将请求正文解析到目标对象
 func (d DefaultJSONSerializer) Deserialize(c echo.Context, i any) error {
-	err := sonic.ConfigDefault.NewDecoder(c.Request().Body).Decode(i)
-	return err
+	return sonic.ConfigDefault.NewDecoder(c.Request().Body).Decode(i)
 }

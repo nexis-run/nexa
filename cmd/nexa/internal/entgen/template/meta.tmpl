@@ -4,13 +4,13 @@
 
 const (
 {{- if $.HasOneFieldID }}
-    // {{ $.ID.Constant }} holds the string denoting the id field in the database.
-    Order{{ $.ID.Constant }} = "{{ $.ID.StorageKey }}"
+    // Order{{ $.ID.Constant }} 表示主键对应的排序参数
+    Order{{ $.ID.Constant }} = "{{ camel $.ID.Name }}"
 {{- end }}
 {{- range $f := $.Fields }}
     {{- $field := $f.Constant }}
-    // {{ $field }} holds the string denoting the {{ lower $f.Name }} field in the database.
-    Order{{ $field }} = "{{ camel $f.StorageKey }}"
+    // Order{{ $field }} 表示 {{ $f.Name }} 字段对应的排序参数
+    Order{{ $field }} = "{{ camel $f.Name }}"
 {{- end }}
 )
 
@@ -24,7 +24,7 @@ var OrderFields = map[string]string{
 {{- end }}
 }
 
-// GetOrderFields returns the order fields by the given field names.
+// GetOrderFields 根据数据库列名返回排序参数与数据库列的映射
 func GetOrderFields(field string) (orderFields map[string]string) {
     orderFields = make(map[string]string)
     if v, ok := OrderFields[field]; ok {

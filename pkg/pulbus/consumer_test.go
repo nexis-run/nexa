@@ -5,38 +5,12 @@
 package pulbus
 
 import (
-	"sync"
+	"context"
 	"testing"
 
+	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/stretchr/testify/require"
 )
-
-func TestConsumer(t *testing.T) {
-	var m sync.Map
-
-	key1 := ConsumerKey{
-		Topic:        "test-Topic-1",
-		Subscription: "test-Subscription-1",
-	}
-	key2 := ConsumerKey{
-		Topic:        "test-Topic-2",
-		Subscription: "test-Subscription-2",
-	}
-
-	consumer1 := "test-consumer"
-	consumer2 := "test-consumer-2"
-
-	m.Store(key1, consumer1)
-	m.Store(key2, consumer2)
-
-	value, ok := m.Load(key1)
-	require.True(t, ok)
-	require.Equal(t, value, consumer1)
-
-	value, ok = m.Load(key2)
-	require.True(t, ok)
-	require.Equal(t, value, consumer2)
-}
 
 func TestConsumerOption(t *testing.T) {
 	options := &ConsumerOptions{}
@@ -44,4 +18,20 @@ func TestConsumerOption(t *testing.T) {
 	WithConsumerChannelSize(100)(options)
 
 	require.Equal(t, options.channelSize, 100)
+}
+
+func TestConsumeValidatesOptions(t *testing.T) {
+	bus := &Pulbus{}
+
+	err := bus.Consume(context.Background(), "topic", "subscription", nil)
+	require.ErrorIs(t, err, ErrNilMessageHandler)
+
+	err = bus.Consume(
+		context.Background(),
+		"topic",
+		"subscription",
+		func(pulsar.Message) error { return nil },
+		WithConsumerChannelSize(-1),
+	)
+	require.ErrorIs(t, err, ErrInvalidChannelSize)
 }

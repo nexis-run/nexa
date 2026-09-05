@@ -5,6 +5,7 @@
 package rest
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -15,23 +16,33 @@ import (
 func RecoverMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			ctx := GetContext(c)
+			c = ensureContext(c)
 
 			defer func() {
 				if r := recover(); r != nil {
-					switch v := r.(type) {
-					case *Error:
-						_ = ctx.SendResponse(v.Code, v.Message)
-					default:
-						err := fmt.Errorf("%v", v)
-						zap.L().Error("捕获HTTP未处理崩溃", zap.Error(err), zap.Stack("stack"))
-
-						_ = ctx.SendResponse(http.StatusInternalServerError, "Internal Server Error")
+					if r == http.ErrAbortHandler {
+						panic(r)
 					}
+
+					var err error
+
+					switch v := r.(type) {
+					case error:
+						err = v
+					default:
+						err = fmt.Errorf("%v", v)
+					}
+
+					var responseErr *Error
+					if !errors.As(err, &responseErr) {
+						zap.L().Error("捕获 HTTP 未处理崩溃", zap.Error(err), zap.Stack("stack"))
+					}
+
+					handleHTTPError(err, c)
 				}
 			}()
 
-			return next(ctx)
+			return next(c)
 		}
 	}
 }

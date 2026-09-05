@@ -18,4 +18,5 @@ func TestUnsafeString(t *testing.T) {
 
 	b2 := UnsafeString2Bytes(s)
 	require.Equal(t, b2, b)
+	require.Equal(t, len(s), cap(b2))
 }

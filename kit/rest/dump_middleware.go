@@ -10,34 +10,17 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	ew "github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
 )
 
-var (
-	Newline            = []byte{10} // \n
-	Space              = []byte{32} //
-	Hyphen             = []byte{45} // -
-	Equal              = []byte{61} // =
-	LeftSquareBracket  = []byte{91} // [
-	RightSquareBracket = []byte{93} // ]
+const (
+	defaultDumpBodyMaxBytes      = 64 << 10
+	dumpRequestBodyTruncatedKey  = "_dump_request_body_truncated"
+	dumpResponseBodyTruncatedKey = "_dump_response_body_truncated"
 )
-
-var (
-	dumpReqHeader  = []byte("Request Header")
-	dumpReqBody    = []byte("Request Body")
-	dumpResHeader  = []byte("Response Header")
-	dumpResBody    = []byte("Response Body")
-	dumpEqual      = append(Space, append(Equal, Space...)...)
-	dumpLeftSplit  = append(bytes.Repeat(Hyphen, 4), LeftSquareBracket...)
-	dumpRightSplit = append(RightSquareBracket, append(bytes.Repeat(Hyphen, 4), Newline...)...)
-)
-
-// dumpBodyMaxBytes 单次 dump 抓取请求体的最大字节数, 避免无限读取导致内存膨胀
-const dumpBodyMaxBytes = 10 << 20 // 10 MiB
 
 type DumpHandler func(echo.Context, []byte, []byte)
 
@@ -48,13 +31,59 @@ type DumpConfig struct {
 
 	RequestHeader        bool
 	RequestHeaderSkipper HeaderSkipper
+	RequestBody          bool
+	RequestBodySkipper   ew.Skipper
 
 	ResponseHeader        bool
 	ResponseHeaderSkipper HeaderSkipper
-
-	ResponseBodySkipper ew.Skipper
+	ResponseBody          bool
+	ResponseBodySkipper   ew.Skipper
+	BodyMaxBytes          int64
 
 	Extra func(echo.Context) []byte
+}
+
+type dumpBodyCapture struct {
+	buffer    bytes.Buffer
+	limit     int64
+	truncated bool
+}
+
+func newDumpBodyCapture(limit int64) *dumpBodyCapture {
+	return &dumpBodyCapture{limit: limit}
+}
+
+func (capture *dumpBodyCapture) Write(data []byte) (n int, err error) {
+	n = len(data)
+
+	remaining := capture.limit - int64(capture.buffer.Len())
+	if remaining <= 0 {
+		capture.truncated = capture.truncated || len(data) > 0
+		return
+	}
+
+	writeLength := len(data)
+	if int64(writeLength) > remaining {
+		writeLength = int(remaining)
+		capture.truncated = true
+	}
+
+	_, _ = capture.buffer.Write(data[:writeLength])
+
+	return
+}
+
+func (capture *dumpBodyCapture) Bytes() []byte {
+	if capture == nil {
+		return nil
+	}
+
+	return capture.buffer.Bytes()
+}
+
+type dumpReadCloser struct {
+	io.Reader
+	io.Closer
 }
 
 type DumpResponseWriter struct {
@@ -84,111 +113,56 @@ func (w *DumpResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return nil, nil, http.ErrNotSupported
 }
 
-func dumpBuffer(cfg *DumpConfig, c echo.Context, reqBody, resBody []byte) []byte {
-	// if skip dump
-	if cfg.Skipper != nil && cfg.Skipper(c) {
-		return nil
-	}
-
-	var buffer bytes.Buffer
-
-	// log time
-	buffer.WriteString(time.Now().Format("2006-01-02 15:04:05.00000"))
-
-	// log [METHOD]
-	buffer.Write(Space)
-	buffer.Write(LeftSquareBracket)
-	buffer.WriteString(c.Request().Method)
-	buffer.Write(RightSquareBracket)
-	buffer.Write(Space)
-
-	// log uri \n
-	buffer.WriteString(c.Request().RequestURI)
-	buffer.Write(Newline)
-
-	// log request header
-	if cfg.RequestHeader {
-		// ----[Request Header]----
-		buffer.Write(dumpLeftSplit)
-		buffer.Write(dumpReqHeader)
-		buffer.Write(dumpRightSplit)
-
-		// TODO c.Request().Header.Write
-		// k = v
-		for _, s := range getHeaders(c.Request().Header, cfg.RequestHeaderSkipper) {
-			buffer.WriteString(s)
-			buffer.Write(Newline)
-		}
-	}
-
-	// log request body
-	if len(reqBody) > 0 {
-		// ----[Request Body]----
-		buffer.Write(dumpLeftSplit)
-		buffer.Write(dumpReqBody)
-		buffer.Write(dumpRightSplit)
-		buffer.Write(reqBody)
-		buffer.Write(Newline)
-	}
-
-	// log response header
-	if cfg.ResponseHeader {
-		// ----[Response Header]----
-		buffer.Write(dumpLeftSplit)
-		buffer.Write(dumpResHeader)
-		buffer.Write(dumpRightSplit)
-
-		// k = v
-
-		for _, s := range getHeaders(c.Response().Header(), cfg.ResponseHeaderSkipper) {
-			buffer.WriteString(s)
-			buffer.Write(Newline)
-		}
-	}
-
-	// log response body
-	if len(resBody) > 0 {
-		// ----[Response Body]----
-		buffer.Write(dumpLeftSplit)
-		buffer.Write(dumpResBody)
-		buffer.Write(dumpRightSplit)
-		buffer.Write(resBody)
-		buffer.Write(Newline)
-	}
-
-	buffer.Write(Newline)
-
-	return buffer.Bytes()
+func (w *DumpResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
-func dump(handler DumpHandler) echo.MiddlewareFunc {
+func dump(cfg *DumpConfig, handler DumpHandler) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) (err error) {
-			// Request
-			var reqBody []byte
-
-			if c.Request().Body != nil {
-				// 限制 dump 抓取的 body 大小, 避免大请求体把整个进程内存吃满
-				reqBody, _ = io.ReadAll(io.LimitReader(c.Request().Body, dumpBodyMaxBytes))
+			if cfg.Skipper != nil && cfg.Skipper(c) {
+				return next(c)
 			}
 
-			c.Request().Body = io.NopCloser(bytes.NewBuffer(reqBody)) // Reset
+			var requestBodyCapture *dumpBodyCapture
 
-			// Response
-			resBody := new(bytes.Buffer)
-			mw := io.MultiWriter(c.Response().Writer, resBody)
-			writer := &DumpResponseWriter{Writer: mw, ResponseWriter: c.Response().Writer}
+			captureRequestBody := cfg.RequestBody && (cfg.RequestBodySkipper == nil || !cfg.RequestBodySkipper(c))
+			if captureRequestBody && c.Request().Body != nil {
+				requestBodyCapture = newDumpBodyCapture(cfg.BodyMaxBytes)
+				requestBody := c.Request().Body
+				c.Request().Body = &dumpReadCloser{
+					Reader: io.TeeReader(requestBody, requestBodyCapture),
+					Closer: requestBody,
+				}
+			}
 
-			c.Response().Writer = writer
+			var responseBodyCapture *dumpBodyCapture
+			originalResponseWriter := c.Response().Writer
+
+			if cfg.ResponseBody {
+				responseBodyCapture = newDumpBodyCapture(cfg.BodyMaxBytes)
+				writer := &DumpResponseWriter{
+					Writer:         io.MultiWriter(originalResponseWriter, responseBodyCapture),
+					ResponseWriter: originalResponseWriter,
+				}
+				c.Response().Writer = writer
+			}
+
+			defer func() {
+				c.Response().Writer = originalResponseWriter
+			}()
 
 			err = next(c)
 
-			// if err != nil {
-			//     c.Error(err)
-			// }
+			if requestBodyCapture != nil && requestBodyCapture.truncated {
+				c.Set(dumpRequestBodyTruncatedKey, true)
+			}
 
-			// Callback
-			handler(c, reqBody, resBody.Bytes())
+			if responseBodyCapture != nil && responseBodyCapture.truncated {
+				c.Set(dumpResponseBodyTruncatedKey, true)
+			}
+
+			handler(c, requestBodyCapture.Bytes(), responseBodyCapture.Bytes())
 
 			return
 		}
@@ -225,11 +199,9 @@ const (
 )
 
 func (mw *DumpZapLoggerMiddleware) WithConfig(cfg *DumpConfig) echo.MiddlewareFunc {
-	return dump(func(c echo.Context, reqBody []byte, resBody []byte) {
-		if cfg.Skipper != nil && cfg.Skipper(c) {
-			return
-		}
+	config := normalizeDumpConfig(cfg)
 
+	return dump(&config, func(c echo.Context, reqBody []byte, resBody []byte) {
 		if c.Get(MiddlewareKeyDumpSkip) != nil {
 			if skip, ok := c.Get(MiddlewareKeyDumpSkip).(bool); ok && skip {
 				return
@@ -245,8 +217,8 @@ func (mw *DumpZapLoggerMiddleware) WithConfig(cfg *DumpConfig) echo.MiddlewareFu
 		}
 
 		// log request header
-		if cfg.RequestHeader {
-			fields = append(fields, zap.Strings("request_header", getHeaders(c.Request().Header, cfg.RequestHeaderSkipper)))
+		if config.RequestHeader {
+			fields = append(fields, zap.Strings("request_header", getHeaders(c.Request().Header, config.RequestHeaderSkipper)))
 		}
 
 		// log request body
@@ -254,24 +226,25 @@ func (mw *DumpZapLoggerMiddleware) WithConfig(cfg *DumpConfig) echo.MiddlewareFu
 			fields = append(fields, zap.ByteString("request_body", reqBody))
 		}
 
+		if truncated, _ := c.Get(dumpRequestBodyTruncatedKey).(bool); truncated {
+			fields = append(fields, zap.Bool("request_body_truncated", true))
+		}
+
 		// log response header
-		if cfg.ResponseHeader {
-			fields = append(fields, zap.Strings("response_header", getHeaders(c.Response().Header(), cfg.ResponseHeaderSkipper)))
+		if config.ResponseHeader {
+			fields = append(fields, zap.Strings("response_header", getHeaders(c.Response().Header(), config.ResponseHeaderSkipper)))
 		}
 
-		if cfg.ResponseBodySkipper == nil {
-			cfg.ResponseBodySkipper = func(_ echo.Context) bool {
-				return false
-			}
-		}
-
-		// log response body
-		if len(resBody) > 0 && !cfg.ResponseBodySkipper(c) {
+		if len(resBody) > 0 && (config.ResponseBodySkipper == nil || !config.ResponseBodySkipper(c)) {
 			fields = append(fields, zap.ByteString("response_body", resBody))
 		}
 
-		if cfg.Extra != nil {
-			extraData := cfg.Extra(c)
+		if truncated, _ := c.Get(dumpResponseBodyTruncatedKey).(bool); truncated {
+			fields = append(fields, zap.Bool("response_body_truncated", true))
+		}
+
+		if config.Extra != nil {
+			extraData := config.Extra(c)
 			if extraData != nil {
 				fields = append(fields, zap.ByteString("extra", extraData))
 			}
@@ -284,13 +257,24 @@ func (mw *DumpZapLoggerMiddleware) WithConfig(cfg *DumpConfig) echo.MiddlewareFu
 	})
 }
 
+func normalizeDumpConfig(cfg *DumpConfig) DumpConfig {
+	if cfg == nil {
+		return DumpConfig{BodyMaxBytes: defaultDumpBodyMaxBytes}
+	}
+
+	config := *cfg
+	if config.BodyMaxBytes <= 0 {
+		config.BodyMaxBytes = defaultDumpBodyMaxBytes
+	}
+
+	return config
+}
+
 func (mw *DumpZapLoggerMiddleware) WithDefaultConfig(skipper ew.Skipper) echo.MiddlewareFunc {
 	return mw.WithConfig(&DumpConfig{
 		Skipper: skipper,
 	})
 }
-
-var _ = DumpSkip
 
 func DumpSkip() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {

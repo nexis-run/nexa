@@ -1,103 +1,131 @@
-{{/* gotype: entgo.io/ent/entc/gen.Graph */}}
+{{ define "soft_delete" }}
+{{ template "header" $ }}
+import (
+    "context"
+    "time"
+    "nexis.run/nexa/kit/entx"
+    {{- $seen := dict }}
+    {{- range $node := $.Nodes }}
+        {{- if softDeleteField $node }}
+    {{ $node.PackageAlias }} "{{ $node.Config.Package }}/{{ $node.PackageDir }}"
+            {{- if $node.HasOneFieldID }}
+                {{- $pkg := $node.ID.Type.PkgPath }}
+                {{- if and $pkg (not (hasKey $seen $pkg)) }}
+    {{ $node.ID.Type.PkgName }} "{{ $pkg }}"
+                    {{- $seen = set $seen $pkg true }}
+                {{- end }}
+            {{- end }}
+        {{- end }}
+    {{- end }}
+)
 
-{{ define "client/additional/soft_delete" }}
-
-{{ range $n := $.Nodes }}
-{{ $client := $n.ClientName }}
-{{- $softDelete := false -}}
-{{- range $f := $n.Fields }}
-		{{- if eq $f.StructField "DeletedAt"}}
-				{{- $softDelete = true -}}
-		{{- end -}}
-{{- end -}}
-
-{{ if $softDelete }}
-{{ $rec := $n.Receiver }}{{ if eq $rec "c" }}{{ $rec = printf "%.2s" $n.Name | lower }}{{ end }}
-
-// SoftDelete returns a soft delete builder for {{ $n.Name }}.
-func (c *{{ $client }}) SoftDelete() *{{ $n.UpdateName }} {
-	mutation := new{{ $n.MutationName }}(c.config, OpUpdate)
-	mutation.SetDeletedAt(time.Now())
-	return &{{ $n.UpdateName }}{config: c.config, hooks: c.Hooks(), mutation: mutation}
+{{ range $node := $.Nodes }}
+{{ with $field := softDeleteField $node }}
+{{- $client := $node.ClientName }}
+{{ if not $node.IsView }}
+// SoftDelete 创建标记匹配实体为已删除的更新构造器
+func (c *{{ $client }}) SoftDelete() *{{ $node.UpdateName }} {
+    return c.Update().SetDeletedAt(time.Now())
 }
 
-// SoftDeleteOne returns a soft delete builder for the given entity.
-func (c *{{ $client }}) SoftDeleteOne({{ $rec }} *{{ $n.Name }}) *{{ $n.UpdateOneName }} {
-	mutation := new{{ $n.MutationName }}(c.config, OpUpdateOne, {{ print "with" $n.Name }}({{ $rec }}))
-	mutation.SetDeletedAt(time.Now())
-	return &{{ $n.UpdateOneName }}{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// SoftDeleteOne 标记给定实体为已删除
+func (c *{{ $client }}) SoftDeleteOne(entity *{{ $node.Name }}) *{{ $node.UpdateOneName }} {
+    return c.UpdateOne(entity).SetDeletedAt(time.Now())
 }
 
-// SoftDeleteOneID returns a soft delete builder for the given id.
-func (c *{{ $client }}) SoftDeleteOneID(id {{ $n.ID.Type }}) *{{ $n.UpdateOneName }} {
-	mutation := new{{ $n.MutationName }}(c.config, OpUpdateOne, {{ print "with" $n.Name "ID" }}(id))
-	mutation.SetDeletedAt(time.Now())
-	return &{{ $n.UpdateOneName }}{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Restore 清除匹配实体的删除时间
+func (c *{{ $client }}) Restore() *{{ $node.UpdateName }} {
+    return c.Update().ClearDeletedAt()
 }
 
-// Restore returns a restore builder for {{ $n.Name }} to clear the DeletedAt field.
-func (c *{{ $client }}) Restore() *{{ $n.UpdateName }} {
-	mutation := new{{ $n.MutationName }}(c.config, OpUpdate)
-	mutation.ClearDeletedAt()
-	return &{{ $n.UpdateName }}{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// RestoreOne 清除给定实体的删除时间
+func (c *{{ $client }}) RestoreOne(entity *{{ $node.Name }}) *{{ $node.UpdateOneName }} {
+    return c.UpdateOne(entity).ClearDeletedAt()
 }
 
-// RestoreOne returns a restore builder for the given entity.
-func (c *{{ $client }}) RestoreOne({{ $rec }} *{{ $n.Name }}) *{{ $n.UpdateOneName }} {
-	mutation := new{{ $n.MutationName }}(c.config, OpUpdateOne, {{ print "with" $n.Name }}({{ $rec }}))
-	mutation.ClearDeletedAt()
-	return &{{ $n.UpdateOneName }}{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// HardDelete 永久删除匹配实体
+func (c *{{ $client }}) HardDelete(ctx context.Context) (int, error) {
+    return c.Delete().Exec(entx.SkipSoftDelete(ctx))
 }
 
-// RestoreOneID returns a restore builder for the given id.
-func (c *{{ $client }}) RestoreOneID(id {{ $n.ID.Type }}) *{{ $n.UpdateOneName }} {
-	mutation := new{{ $n.MutationName }}(c.config, OpUpdateOne, {{ print "with" $n.Name "ID" }}(id))
-	mutation.ClearDeletedAt()
-	return &{{ $n.UpdateOneName }}{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// HardDeleteOne 永久删除给定实体
+func (c *{{ $client }}) HardDeleteOne(ctx context.Context, entity *{{ $node.Name }}) error {
+    {{- if $node.HasOneFieldID }}
+    return c.DeleteOne(entity).Exec(entx.SkipSoftDelete(ctx))
+    {{- else }}
+    count, err := c.Delete().Where(
+        {{- range $id := $node.EdgeSchema.ID }}
+        {{ $node.Package }}.{{ $id.StructField }}(entity.{{ $id.StructField }}),
+        {{- end }}
+    ).Exec(entx.SkipSoftDelete(ctx))
+    if err == nil && count == 0 {
+        err = &NotFoundError{label: {{ $node.Package }}.Label}
+    }
+    return err
+    {{- end }}
 }
 
-// HardDelete returns a hard delete builder for {{ $n.Name }} that permanently removes records.
-func (c *{{ $client }}) HardDelete() *{{ $n.DeleteName }} {
-	return c.Delete()
+{{ if $node.HasOneFieldID }}
+// SoftDeleteOneID 根据主键标记实体为已删除
+func (c *{{ $client }}) SoftDeleteOneID(id {{ $node.ID.Type }}) *{{ $node.UpdateOneName }} {
+    return c.UpdateOneID(id).SetDeletedAt(time.Now())
 }
 
-// HardDeleteOne returns a hard delete builder for the given entity.
-func (c *{{ $client }}) HardDeleteOne({{ $rec }} *{{ $n.Name }}) *{{ $n.DeleteOneName }} {
-	return c.DeleteOne({{ $rec }})
+// RestoreOneID 根据主键清除实体的删除时间
+func (c *{{ $client }}) RestoreOneID(id {{ $node.ID.Type }}) *{{ $node.UpdateOneName }} {
+    return c.UpdateOneID(id).ClearDeletedAt()
 }
 
-// HardDeleteOneID returns a hard delete builder for the given id.
-func (c *{{ $client }}) HardDeleteOneID(id {{ $n.ID.Type }}) *{{ $n.DeleteOneName }} {
-	return c.DeleteOneID(id)
+// HardDeleteOneID 根据主键永久删除实体
+func (c *{{ $client }}) HardDeleteOneID(ctx context.Context, id {{ $node.ID.Type }}) error {
+    return c.DeleteOneID(id).Exec(entx.SkipSoftDelete(ctx))
 }
-
-// QueryNotDeleted returns a query not deleted builder for {{ $n.Name }}.
-func (c *{{ $client }}) QueryNotDeleted() *{{ $n.QueryName }} {
-    return c.Query().Where({{ $n.Package }}.DeletedAtIsNil())
-}
-
-// QueryDeleted returns a query builder for deleted {{ $n.Name }} entities.
-func (c *{{ $client }}) QueryDeleted() *{{ $n.QueryName }} {
-    return c.Query().Where({{ $n.Package }}.DeletedAtNotNil())
-}
-
-// GetNotDeleted returns a {{ $n.Name }} not deleted entity by its id.
-func (c *{{ $client }}) GetNotDeleted(ctx context.Context, id {{ $n.ID.Type }}) (*{{ $n.Name }}, error) {
-	return c.Query().Where({{ $n.Package }}.ID(id), {{ $n.Package }}.DeletedAtIsNil()).Only(ctx)
-}
-
-// GetNotDeletedX is like GetNotDeleted, but panics if an error occurs.
-func (c *{{ $client }}) GetNotDeletedX(ctx context.Context, id {{ $n.ID.Type }}) *{{ $n.Name }} {
-	obj, err := c.GetNotDeleted(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-{{ end }}
-
 {{ end }}
 {{ end }}
 
+// QueryNotDeleted 创建未删除实体的查询构造器
+func (c *{{ $client }}) QueryNotDeleted() *{{ $node.QueryName }} {
+    return c.Query().Where({{ $node.Package }}.{{ $field.StructField }}IsNil())
+}
 
-{{/* gotype: entgo.io/ent/entc/gen.Type */}}
+// QueryDeleted 查询所有已删除实体
+func (c *{{ $client }}) QueryDeleted(ctx context.Context) ([]*{{ $node.Name }}, error) {
+    return c.Query().Where({{ $node.Package }}.{{ $field.StructField }}NotNil()).All(entx.SkipSoftDelete(ctx))
+}
+
+{{ if $node.HasOneFieldID }}
+// GetNotDeleted 根据主键查询未删除实体
+func (c *{{ $client }}) GetNotDeleted(ctx context.Context, id {{ $node.ID.Type }}) (*{{ $node.Name }}, error) {
+    return c.QueryNotDeleted().Where({{ $node.Package }}.ID(id)).Only(ctx)
+}
+
+// GetNotDeletedX 根据主键查询未删除实体，失败时触发 panic
+func (c *{{ $client }}) GetNotDeletedX(ctx context.Context, id {{ $node.ID.Type }}) *{{ $node.Name }} {
+    entity, err := c.GetNotDeleted(ctx, id)
+    if err != nil {
+        panic(err)
+    }
+    return entity
+}
+{{ end }}
+{{ end }}
+{{ end }}
+{{ end }}
+
+{{ define "query/additional/soft_delete" }}
+{{ with $field := softDeleteField $ }}
+// SoftDeleteColumn 返回删除过滤器使用的数据库列
+func (query *{{ $.QueryName }}) SoftDeleteColumn() string {
+    return {{ $.Package }}.{{ $field.Constant }}
+}
+
+// WhereP 追加数据库层的查询条件
+func (query *{{ $.QueryName }}) WhereP(predicates ...func(*sql.Selector)) {
+    typedPredicates := make([]predicate.{{ $.Name }}, len(predicates))
+    for index := range predicates {
+        typedPredicates[index] = predicates[index]
+    }
+    query.Where(typedPredicates...)
+}
+{{ end }}
+{{ end }}

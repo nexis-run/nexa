@@ -1,62 +1,133 @@
-// Copyright (C) godoc. 2026-present.
-//
-// Created at 2026-01-12, by liasica
-
 package command
 
 import (
-	"fmt"
-	"os"
+	"errors"
 
 	"github.com/spf13/cobra"
 
 	"nexis.run/nexa/cmd/nexa/internal/base"
+	"nexis.run/nexa/cmd/nexa/internal/fileplan"
 )
 
-func ConfigCmd() (*cobra.Group, *cobra.Command) {
-	g := &cobra.Group{
-		ID:    "config",
-		Title: "配置管理命令",
-	}
+func (app *application) configCommand() *cobra.Command {
+	command := &cobra.Command{Use: "config", Short: "初始化、查看和校验项目配置"}
+	command.AddCommand(app.configInitCommand(), app.configShowCommand(), app.configValidateCommand())
 
-	cmd := &cobra.Command{
-		Use:               "config",
-		Short:             "管理配置",
-		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
-		GroupID:           g.ID,
-	}
-
-	cmd.AddCommand(configInitCmd())
-
-	return g, cmd
+	return command
 }
 
-func configInitCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:               "init",
-		Short:             "初始化配置",
-		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
-		Run: func(_ *cobra.Command, _ []string) {
-			cfg, _ := base.GetConfig()
-			p := cfg.GetConfigFilePath()
-
-			// 检测配置文件是否已存在
-			if _, err := os.Stat(p); err == nil {
-				fmt.Println("配置文件已存在")
-				os.Exit(1)
+func (app *application) configInitCommand() *cobra.Command {
+	settings := &writeSettings{}
+	command := &cobra.Command{
+		Use:   "init",
+		Short: "创建默认配置文件",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) (err error) {
+			if command.Flags().Changed("config") && app.configPath == "" {
+				return errors.New("显式配置路径不能为空")
 			}
 
-			// 写入默认配置
-			defaultCfg := base.DefaultConfig()
-			fmt.Printf("默认配置:\n%s\n", defaultCfg)
+			var config *base.Config
 
-			err := os.WriteFile(p, []byte(defaultCfg), os.ModePerm)
+			config, err = base.NewDefaultConfig(app.configPath)
 			if err != nil {
-				fmt.Printf("写入配置文件失败: %v\n", err)
-				os.Exit(1)
+				return
 			}
 
-			fmt.Println("配置文件创建成功")
+			var content []byte
+
+			content, err = config.MarshalYAMLBytes()
+			if err != nil {
+				return
+			}
+
+			err = app.applyFiles(command, settings, []fileplan.File{{
+				Path:      config.GetConfigFilePath(),
+				Content:   content,
+				Overwrite: settings.force,
+			}})
+
+			return
 		},
 	}
+	settings.bind(command, true)
+
+	return command
+}
+
+func (app *application) configShowCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show",
+		Short: "输出合并默认值后的有效配置",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) (err error) {
+			var config *base.Config
+
+			config, err = app.loadConfig(command)
+			if err != nil {
+				return
+			}
+
+			if app.json {
+				err = writeJSON(command.OutOrStdout(), config)
+				return
+			}
+
+			var content []byte
+
+			content, err = config.MarshalYAMLBytes()
+			if err != nil {
+				return
+			}
+
+			_, err = command.OutOrStdout().Write(content)
+
+			return
+		},
+	}
+}
+
+func (app *application) configValidateCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "validate",
+		Short: "校验配置字段和项目路径",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) (err error) {
+			var config *base.Config
+
+			config, err = app.loadConfig(command)
+			if err != nil {
+				return
+			}
+
+			result := struct {
+				Valid  bool   `json:"valid"`
+				Path   string `json:"path"`
+				Exists bool   `json:"exists"`
+			}{true, config.GetConfigFilePath(), config.ConfigExists()}
+
+			if app.json {
+				err = writeJSON(command.OutOrStdout(), result)
+				return
+			}
+
+			command.Printf("配置有效：%s\n", result.Path)
+
+			if !result.Exists {
+				command.Println("配置文件不存在，当前使用默认值。")
+			}
+
+			return
+		},
+	}
+}
+
+func (app *application) loadConfig(command *cobra.Command) (*base.Config, error) {
+	explicit := command.Flags().Changed("config")
+
+	return base.LoadConfig(base.LoadOptions{
+		ConfigPath:   app.configPath,
+		Explicit:     explicit,
+		AllowMissing: !explicit,
+	})
 }

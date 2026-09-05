@@ -2,15 +2,8 @@ name: Release CLI
 
 on:
   push:
-    branches:
-      - 'master'
-    paths:
-      - '.github/workflows/release.yml'
-      - 'cmd/nexa/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Makefile'
-  workflow_dispatch:
+    tags:
+      - 'v*.*.*'
 
 permissions:
   contents: write
@@ -25,32 +18,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@v7.0.0
         with:
           go-version-file: 'go.mod'
           cache: true
+
+      - name: Verify CLI
+        run: |
+          go test ./cmd/nexa/...
+          go vet ./cmd/nexa/...
+          echo '本发布任务验证公开 CLI，私有框架全包检查结果见 Verify code 工作流。' >>"$GITHUB_STEP_SUMMARY"
 
       - name: Read release metadata
         id: metadata
         shell: bash
         run: |
-          version=$(sed -nE 's/^[[:space:]]*Version[[:space:]]*= "([^"]+)"/\1/p' cmd/nexa/main.go)
-          if [[ -z "$version" ]]; then
-            echo '无法从 cmd/nexa/main.go 读取版本号' >&2
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "发布标签必须是 vX.Y.Z 格式的稳定版本：$tag" >&2
             exit 1
           fi
 
-          hash=$(git rev-parse --short=7 HEAD)
-          build_time=$(date -u '+%Y-%m-%dT%H:%M:%S+00:00')
-          echo "version=$version" >>"$GITHUB_OUTPUT"
-          echo "hash=$hash" >>"$GITHUB_OUTPUT"
-          echo "build_time=$build_time" >>"$GITHUB_OUTPUT"
-          echo "tag=${version}.${hash}" >>"$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "hash=$(git rev-parse --short=12 HEAD)"
+            echo "build_time=$(date -u '+%Y-%m-%dT%H:%M:%S+00:00')"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Build release binaries
         env:
@@ -59,17 +59,34 @@ jobs:
           BUILD_TIME: '${{ steps.metadata.outputs.build_time }}'
         run: make all
 
+      - name: Create checksums
+        working-directory: bin
+        run: |
+          file nexa-linux-amd64 nexa-linux-arm64
+          if readelf -l nexa-linux-amd64 nexa-linux-arm64 | grep INTERP >/dev/null; then
+            echo 'Linux 产物包含动态加载器，不能发布。' >&2
+            exit 1
+          fi
+          sha256sum nexa-* > checksums.txt
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: '${{ github.token }}'
-          TAG: '${{ steps.metadata.outputs.tag }}'
+          TAG: '${{ github.ref_name }}'
         shell: bash
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" bin/* --clobber
+          if state=$(gh release view "$TAG" --json isDraft --jq '.isDraft'); then
+            if [[ "$state" != true ]]; then
+              echo "版本 $TAG 已发布，不能覆盖现有产物，请使用新版本号。" >&2
+              exit 1
+            fi
           else
-            gh release create "$TAG" bin/* \
+            gh release create "$TAG" \
+              --draft \
+              --verify-tag \
               --generate-notes \
               --target "$GITHUB_SHA" \
               --title "$TAG"
           fi
+          gh release upload "$TAG" bin/* --clobber
+          gh release edit "$TAG" --draft=false
