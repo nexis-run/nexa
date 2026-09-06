@@ -1,4 +1,4 @@
-// Copyright (C) micros. 2024-present.
+// Copyright (C) nexa. 2024-present.
 //
 // Created at 2024-12-11, by liasica
 

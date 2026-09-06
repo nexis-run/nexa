@@ -1,4 +1,4 @@
-// Copyright (C) aurservd. 2025-present.
+// Copyright (C) nexa. 2025-present.
 //
 // Created at 2025-10-21, by liasica
 
