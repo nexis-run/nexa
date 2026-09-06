@@ -44,7 +44,7 @@ func (app *application) entNewCommand() *cobra.Command {
 			return
 		},
 	}
-	settings.bind(command, true)
+	settings.bind(command, command.Flags(), true)
 
 	return command
 }
@@ -77,7 +77,7 @@ func (app *application) entGenerateCommand() *cobra.Command {
 			return
 		},
 	}
-	settings.bind(command, false)
+	settings.bind(command, command.Flags(), false)
 
 	return command
 }

@@ -166,7 +166,7 @@ func prepareBootstrap(ctx context.Context, entPath string, request workerRequest
 					return
 				}
 
-				if !os.IsNotExist(err) {
+				if !errors.Is(err, os.ErrNotExist) {
 					return
 				}
 
@@ -301,7 +301,7 @@ func generatedFiles(ctx context.Context, entPath string, output string, owned ma
 			return fmt.Errorf("生成 Ent 输出与手写文件冲突，未覆盖：%s", target)
 		}
 
-		if err != nil && !os.IsNotExist(err) {
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return
 		}
 

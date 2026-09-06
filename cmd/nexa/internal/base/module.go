@@ -5,6 +5,7 @@
 package base
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,34 +14,47 @@ import (
 	"golang.org/x/mod/module"
 )
 
-// GetModule 获取模块信息
-func GetModule(dir string) (string, error) {
-	// 构造 go.mod 文件路径
+// ParseModFile 读取并解析目录下的 go.mod
+func ParseModFile(dir string) (modFile *modfile.File, err error) {
 	goModPath := filepath.Join(dir, "go.mod")
 
-	// 读取文件内容
-	data, err := os.ReadFile(goModPath)
-	if err != nil {
-		return "", fmt.Errorf("go.mod 读取失败（%s）：%w", goModPath, err)
-	}
+	var data []byte
 
-	// 解析 go.mod 文件
-	var modFile *modfile.File
+	data, err = os.ReadFile(goModPath)
+	if err != nil {
+		err = fmt.Errorf("go.mod 读取失败（%s）：%w", goModPath, err)
+		return
+	}
 
 	modFile, err = modfile.Parse(goModPath, data, nil)
 	if err != nil {
-		return "", fmt.Errorf("go.mod 解析失败（%s）：%w", goModPath, err)
+		err = fmt.Errorf("go.mod 解析失败（%s）：%w", goModPath, err)
 	}
 
-	// 获取模块路径
+	return
+}
+
+// GetModule 读取并校验 go.mod 声明的模块路径
+func GetModule(dir string) (modulePath string, err error) {
+	var modFile *modfile.File
+
+	modFile, err = ParseModFile(dir)
+	if err != nil {
+		return
+	}
+
 	if modFile.Module == nil {
-		return "", fmt.Errorf("go.mod 中未找到 module 字段信息")
+		err = errors.New("go.mod 中未找到 module 字段信息")
+		return
 	}
 
 	err = module.CheckImportPath(modFile.Module.Mod.Path)
 	if err != nil {
-		return "", fmt.Errorf("模块路径无效：%w", err)
+		err = fmt.Errorf("模块路径无效：%w", err)
+		return
 	}
 
-	return modFile.Module.Mod.Path, nil
+	modulePath = modFile.Module.Mod.Path
+
+	return
 }

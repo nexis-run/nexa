@@ -5,13 +5,11 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/mod/modfile"
 
 	"nexis.run/nexa/cmd/nexa/internal/base"
 	"nexis.run/nexa/cmd/nexa/internal/entgen"
@@ -154,14 +152,7 @@ func inspectProject(config *base.Config) []diagnostic {
 }
 
 func checkEntVersion(root string) diagnostic {
-	content, err := os.ReadFile(filepath.Join(root, "go.mod"))
-	if err != nil {
-		return diagnostic{"ent", "error", err.Error()}
-	}
-
-	var module *modfile.File
-
-	module, err = modfile.Parse("go.mod", content, nil)
+	module, err := base.ParseModFile(root)
 	if err != nil {
 		return diagnostic{"ent", "error", err.Error()}
 	}

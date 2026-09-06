@@ -15,6 +15,15 @@ import (
 	"nexis.run/nexa/cmd/nexa/internal/schema"
 )
 
+// daoTemplateVariables 定义 DAO 模板变量
+type daoTemplateVariables struct {
+	Package      string
+	EntPkgImport string
+	Name         string
+	OrmClient    string
+}
+
+// diTemplateVariables 定义依赖注入初始文件模板变量
 type diTemplateVariables struct {
 	Package      string
 	TypeName     string
@@ -50,23 +59,14 @@ func (generator *Gen) PlanDAO(names []string, force bool, withDI bool) (files []
 		return
 	}
 
-	for _, name := range names {
-		var content []byte
-
-		content, err = renderGo("dao.tmpl", &base.DaoTemplateVariables{
+	files, err = planFiles(directory, "dao.tmpl", names, force, func(name string) any {
+		return &daoTemplateVariables{
 			Package:      packageName,
 			EntPkgImport: entImport,
 			Name:         name,
 			OrmClient:    generator.Config.OrmClient,
-		})
-		if err != nil {
-			return
 		}
-
-		files = append(files, fileplan.File{Path: outputPath(directory, name), Content: content, Overwrite: force})
-	}
-
-	err = preflightDeclarations(directory, files)
+	})
 	if err != nil {
 		return
 	}

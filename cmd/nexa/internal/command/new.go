@@ -11,7 +11,7 @@ import (
 func (app *application) newCommand() *cobra.Command {
 	settings := &writeSettings{}
 	command := &cobra.Command{Use: "new", Short: "批量生成 DAO 和 Echo 上下文"}
-	settings.bindPersistent(command, true)
+	settings.bind(command, command.PersistentFlags(), true)
 
 	var withDI bool
 
@@ -22,16 +22,9 @@ func (app *application) newCommand() *cobra.Command {
 		Args:              exportedIdentifierArgs,
 		ValidArgsFunction: app.completeSchemas,
 		RunE: func(command *cobra.Command, names []string) (err error) {
-			var config *base.Config
-
-			config, err = app.loadConfig(command)
-			if err != nil {
-				return
-			}
-
 			var generator *gen.Gen
 
-			generator, err = gen.New(config)
+			generator, err = app.generator(command)
 			if err != nil {
 				return
 			}
@@ -56,16 +49,9 @@ func (app *application) newCommand() *cobra.Command {
 		Example: examples("nexa new echoctx Rider Operator", "nexa new echoctx Rider --check"),
 		Args:    exportedIdentifierArgs,
 		RunE: func(command *cobra.Command, names []string) (err error) {
-			var config *base.Config
-
-			config, err = app.loadConfig(command)
-			if err != nil {
-				return
-			}
-
 			var generator *gen.Gen
 
-			generator, err = gen.New(config)
+			generator, err = app.generator(command)
 			if err != nil {
 				return
 			}
@@ -85,4 +71,17 @@ func (app *application) newCommand() *cobra.Command {
 	command.AddCommand(daoCommand, echoCommand)
 
 	return command
+}
+
+func (app *application) generator(command *cobra.Command) (generator *gen.Gen, err error) {
+	var config *base.Config
+
+	config, err = app.loadConfig(command)
+	if err != nil {
+		return
+	}
+
+	generator, err = gen.New(config)
+
+	return
 }

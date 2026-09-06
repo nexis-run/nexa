@@ -50,7 +50,7 @@ func (app *application) configInitCommand() *cobra.Command {
 			return
 		},
 	}
-	settings.bind(command, true)
+	settings.bind(command, command.Flags(), true)
 
 	return command
 }

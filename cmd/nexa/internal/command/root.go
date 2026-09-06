@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"nexis.run/nexa/cmd/nexa/internal/fileplan"
 )
@@ -148,23 +149,14 @@ type writeSettings struct {
 	check  bool
 }
 
-func (settings *writeSettings) bind(command *cobra.Command, force bool) {
+// bind 把写入选项注册到指定的选项集，传入 PersistentFlags 时子命令共享这些选项
+func (settings *writeSettings) bind(command *cobra.Command, flags *pflag.FlagSet, force bool) {
 	if force {
-		command.Flags().BoolVarP(&settings.force, "force", "f", false, "覆盖内容不同的已有文件")
+		flags.BoolVarP(&settings.force, "force", "f", false, "覆盖内容不同的已有文件")
 	}
 
-	command.Flags().BoolVar(&settings.dryRun, "dry-run", false, "列出文件变更，不应用变更")
-	command.Flags().BoolVar(&settings.check, "check", false, "检查文件是否需要更新，有差异时以状态码 2 退出")
-	command.MarkFlagsMutuallyExclusive("dry-run", "check")
-}
-
-func (settings *writeSettings) bindPersistent(command *cobra.Command, force bool) {
-	if force {
-		command.PersistentFlags().BoolVarP(&settings.force, "force", "f", false, "覆盖内容不同的已有文件")
-	}
-
-	command.PersistentFlags().BoolVar(&settings.dryRun, "dry-run", false, "列出文件变更，不应用变更")
-	command.PersistentFlags().BoolVar(&settings.check, "check", false, "检查文件是否需要更新，有差异时以状态码 2 退出")
+	flags.BoolVar(&settings.dryRun, "dry-run", false, "列出文件变更，不应用变更")
+	flags.BoolVar(&settings.check, "check", false, "检查文件是否需要更新，有差异时以状态码 2 退出")
 	command.MarkFlagsMutuallyExclusive("dry-run", "check")
 }
 

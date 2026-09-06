@@ -2,6 +2,7 @@ package entgen
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/format"
 	"os"
@@ -38,7 +39,7 @@ func (eng *EntGen) planGenerateFile(target string) (files []fileplan.File, err e
 	var entries []os.DirEntry
 
 	entries, err = os.ReadDir(target)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return
 	}
 
@@ -73,7 +74,7 @@ func (eng *EntGen) planGenerateFile(target string) (files []fileplan.File, err e
 			}
 
 			directive = "//go:generate nexa --config " + strconv.Quote(filepath.ToSlash(relativeConfig)) + " ent generate"
-		} else if !os.IsNotExist(err) {
+		} else if !errors.Is(err, os.ErrNotExist) {
 			return
 		}
 	}

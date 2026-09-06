@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -57,7 +58,7 @@ func Declarations(directory string) (declarations map[string]Declaration, err er
 	var entries []os.DirEntry
 
 	entries, err = os.ReadDir(directory)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		err = nil
 		return
 	}

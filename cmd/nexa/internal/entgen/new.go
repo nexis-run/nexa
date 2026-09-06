@@ -2,11 +2,13 @@ package entgen
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/format"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/template"
 
 	"entgo.io/ent/entc/gen"
@@ -15,6 +17,10 @@ import (
 	"nexis.run/nexa/cmd/nexa/internal/fileplan"
 	"nexis.run/nexa/cmd/nexa/internal/schema"
 )
+
+var schemaTemplate = sync.OnceValues(func() (*template.Template, error) {
+	return template.New("schema").Funcs(gen.Funcs).Parse(TemplateNewSchema)
+})
 
 // PlanNew 预检所有名称并渲染 schema，不写入项目文件
 func (eng *EntGen) PlanNew(names []string, force bool) (files []fileplan.File, err error) {
@@ -46,7 +52,7 @@ func (eng *EntGen) PlanNew(names []string, force bool) (files []fileplan.File, e
 	var entries []os.DirEntry
 
 	entries, err = os.ReadDir(target)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return
 	}
 
@@ -70,7 +76,7 @@ func (eng *EntGen) PlanNew(names []string, force bool) (files []fileplan.File, e
 	}
 
 	for _, name := range names {
-		if declaration, exists := declarations[name]; exists && declaration.Path != filepath.Join(target, strings.ToLower(name)+".go") {
+		if declaration, exists := declarations[name]; exists && declaration.Path != schemaFilePath(target, name) {
 			err = fmt.Errorf("schema 类型 %s 已声明在 %s", name, declaration.Path)
 			return
 		}
@@ -78,7 +84,7 @@ func (eng *EntGen) PlanNew(names []string, force bool) (files []fileplan.File, e
 
 	var tmpl *template.Template
 
-	tmpl, err = template.New("schema").Funcs(gen.Funcs).Parse(TemplateNewSchema)
+	tmpl, err = schemaTemplate()
 	if err != nil {
 		return
 	}
@@ -99,11 +105,7 @@ func (eng *EntGen) PlanNew(names []string, force bool) (files []fileplan.File, e
 			return
 		}
 
-		files = append(files, fileplan.File{
-			Path:      filepath.Join(target, strings.ToLower(name)+".go"),
-			Content:   content,
-			Overwrite: force,
-		})
+		files = append(files, fileplan.File{Path: schemaFilePath(target, name), Content: content, Overwrite: force})
 	}
 
 	var directives []fileplan.File
@@ -114,4 +116,8 @@ func (eng *EntGen) PlanNew(names []string, force bool) (files []fileplan.File, e
 	}
 
 	return
+}
+
+func schemaFilePath(directory, name string) string {
+	return filepath.Join(directory, strings.ToLower(name)+".go")
 }

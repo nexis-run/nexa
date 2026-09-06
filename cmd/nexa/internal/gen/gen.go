@@ -17,6 +17,12 @@ type Gen struct {
 	Config *base.Config
 }
 
+// echoContextTemplateVariables 定义 Echo Context 模板变量
+type echoContextTemplateVariables struct {
+	Package string
+	Name    string
+}
+
 func New(cfg *base.Config) (generator *Gen, err error) {
 	if cfg == nil {
 		err = errors.New("生成器配置不能为空")
@@ -39,6 +45,12 @@ func New(cfg *base.Config) (generator *Gen, err error) {
 }
 
 func (generator *Gen) PlanEchoContext(names []string, force bool) (files []fileplan.File, err error) {
+	defer func() {
+		if err != nil {
+			files = nil
+		}
+	}()
+
 	var directory, packageName string
 
 	directory, packageName, err = generator.preparePackage(generator.Config.EchoctxPath, names)
@@ -46,15 +58,26 @@ func (generator *Gen) PlanEchoContext(names []string, force bool) (files []filep
 		return
 	}
 
+	files, err = planFiles(directory, "echoctx.tmpl", names, force, func(name string) any {
+		return &echoContextTemplateVariables{Package: packageName, Name: name}
+	})
+
+	return
+}
+
+// planFiles 逐个渲染模板，再检查整批输出与包内已有顶层声明的冲突
+func planFiles(
+	directory string,
+	templateName string,
+	names []string,
+	force bool,
+	variables func(name string) any,
+) (files []fileplan.File, err error) {
 	for _, name := range names {
 		var content []byte
 
-		content, err = renderGo("echoctx.tmpl", &base.EchoCtxTemplateVariables{
-			Package: packageName,
-			Name:    name,
-		})
+		content, err = renderGo(templateName, variables(name))
 		if err != nil {
-			files = nil
 			return
 		}
 
@@ -62,9 +85,6 @@ func (generator *Gen) PlanEchoContext(names []string, force bool) (files []filep
 	}
 
 	err = preflightDeclarations(directory, files)
-	if err != nil {
-		files = nil
-	}
 
 	return
 }
