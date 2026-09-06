@@ -170,17 +170,6 @@ func dump(cfg *DumpConfig, handler DumpHandler) echo.MiddlewareFunc {
 	}
 }
 
-type DumpZapLoggerMiddleware struct {
-}
-
-func NewDumpLoggerMiddleware() *DumpZapLoggerMiddleware {
-	return &DumpZapLoggerMiddleware{}
-}
-
-func DumpMiddleware(skipper ew.Skipper) echo.MiddlewareFunc {
-	return NewDumpLoggerMiddleware().WithDefaultConfig(skipper)
-}
-
 func getHeaders(headers http.Header, skipper HeaderSkipper) (strs []string) {
 	for k := range headers {
 		if skipper != nil && skipper(k) {
@@ -199,7 +188,8 @@ const (
 	DumpReceivedRestServer DumpReceived = 1 // rest server 收到请求
 )
 
-func (mw *DumpZapLoggerMiddleware) WithConfig(cfg *DumpConfig) echo.MiddlewareFunc {
+// DumpMiddleware 以 zap 记录请求与响应，cfg 为 nil 时使用默认配置
+func DumpMiddleware(cfg *DumpConfig) echo.MiddlewareFunc {
 	config := normalizeDumpConfig(cfg)
 
 	return dump(&config, func(c echo.Context, reqBody []byte, resBody []byte) {
@@ -269,12 +259,7 @@ func normalizeDumpConfig(cfg *DumpConfig) DumpConfig {
 	return config
 }
 
-func (mw *DumpZapLoggerMiddleware) WithDefaultConfig(skipper ew.Skipper) echo.MiddlewareFunc {
-	return mw.WithConfig(&DumpConfig{
-		Skipper: skipper,
-	})
-}
-
+// DumpSkip 标记当前请求不记录 dump 日志
 func DumpSkip() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {

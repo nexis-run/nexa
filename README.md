@@ -104,7 +104,7 @@ server.Use(rest.CORSMiddleware(
 
 `GetRequestURL` 支持原始 URL、URI 和转发前缀；相关代理请求头应由可信网关覆盖，不能直接将客户端传入的值用于安全判断。
 
-请求日志默认不记录正文。通过 `DumpConfig.RequestBody`、`ResponseBody` 显式启用，每份正文默认最多记录 64 KiB，可使用 `BodyMaxBytes` 和 skipper 控制。
+请求日志由 `rest.DumpMiddleware(cfg)` 记录，`cfg` 为 nil 时使用默认配置，默认不记录正文。通过 `DumpConfig.RequestBody`、`ResponseBody` 显式启用，每份正文默认最多记录 64 KiB，可使用 `BodyMaxBytes` 和 skipper 控制。
 
 ### 权限客户端
 

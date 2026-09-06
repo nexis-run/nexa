@@ -174,7 +174,7 @@ func TestCloseWaitsForConsumerCreation(t *testing.T) {
 	result := make(chan error, 1)
 
 	go func() {
-		result <- bus.ConsumeWithLoop(context.Background(), "topic", "subscription", func(pulsar.Message) error { return nil })
+		result <- bus.Consume(context.Background(), "topic", "subscription", func(pulsar.Message) error { return nil })
 	}()
 	<-client.subscribed
 

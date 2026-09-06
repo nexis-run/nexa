@@ -134,13 +134,6 @@ func (consumer *Consumer) handleMessage(msg pulsar.Message, handler MessageHandl
 	}
 }
 
-// ConsumeWithLoop 阻塞消费消息
-//
-// Deprecated: 使用 Consume
-func (bus *Pulbus) ConsumeWithLoop(ctx context.Context, topic, subscription string, handler MessageHandler) error {
-	return bus.Consume(ctx, topic, subscription, handler)
-}
-
 // Consume 使用 channel 阻塞消费消息
 func (bus *Pulbus) Consume(ctx context.Context, topic, subscription string, handler MessageHandler, opts ...ConsumerOption) error {
 	if handler == nil {

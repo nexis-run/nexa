@@ -58,13 +58,6 @@ func CORSWithAllowHeaders(headers ...string) CORSOption {
 	})
 }
 
-// CORSMiddlware 创建 CORS 中间件
-//
-// Deprecated: 使用 CORSMiddleware
-func CORSMiddlware(options ...CORSOption) echo.MiddlewareFunc {
-	return CORSMiddleware(options...)
-}
-
 func CORSMiddleware(options ...CORSOption) echo.MiddlewareFunc {
 	config := middleware.DefaultCORSConfig
 	config.AllowOrigins = slices.Clone(config.AllowOrigins)
