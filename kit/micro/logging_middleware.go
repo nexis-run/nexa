@@ -26,7 +26,7 @@ func LoggingMiddlewareServerOption() grpc.ServerOption {
 // LoggingMiddleware 创建一个日志中间件，用于记录gRPC请求详情
 func LoggingMiddleware() middleware.Middleware {
 	return func(handler middleware.Handler) middleware.Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			var (
 				code      int32
 				reason    string
@@ -69,8 +69,7 @@ func LoggingMiddleware() middleware.Middleware {
 			}
 
 			if err != nil {
-				fields = append(fields, zap.String("reason", reason))
-				fields = append(fields, zap.Error(err))
+				fields = append(fields, zap.String("reason", reason), zap.Error(err))
 				logger.Error("gRPC request failed", fields...)
 			} else {
 				logger.Info("gRPC request completed", fields...)

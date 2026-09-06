@@ -196,17 +196,15 @@ func getHeaders(headers http.Header, skipper HeaderSkipper) (strs []string) {
 type DumpReceived = int8
 
 const (
-	DumpReceivedRestServer DumpReceived = 1 // 1: reset server 收到请求
+	DumpReceivedRestServer DumpReceived = 1 // rest server 收到请求
 )
 
 func (mw *DumpZapLoggerMiddleware) WithConfig(cfg *DumpConfig) echo.MiddlewareFunc {
 	config := normalizeDumpConfig(cfg)
 
 	return dump(&config, func(c echo.Context, reqBody []byte, resBody []byte) {
-		if c.Get(MiddlewareKeyDumpSkip) != nil {
-			if skip, ok := c.Get(MiddlewareKeyDumpSkip).(bool); ok && skip {
-				return
-			}
+		if skip, ok := c.Get(MiddlewareKeyDumpSkip).(bool); ok && skip {
+			return
 		}
 
 		fields := []zap.Field{

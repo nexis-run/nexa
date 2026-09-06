@@ -7,6 +7,7 @@ package pulbus
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
@@ -20,7 +21,7 @@ type ProducerOption func(*pulsar.ProducerMessage)
 // 2. Topic Compaction：相同 Key 只保留最新消息
 // 3. Key_Shared 模式：相同 Key 的消息发送到同一 Consumer 实例
 //
-// 使用示例:
+// 使用示例：
 //
 //	bus.Send(ctx, "orders", WithProducerKey("user:123"), WithPayload(data))
 func WithProducerKey(key string) ProducerOption {
@@ -45,11 +46,11 @@ func WithProducerDeliverAfter(d time.Duration) ProducerOption {
 
 // WithSequenceID 手动指定序列号（用于消息去重）
 //
-// 注意: Pulsar 去重默认未启用,需要先配置:
+// 注意：Pulsar 去重默认未启用，需要先配置：
 //
 //	bin/pulsar-admin namespaces set-deduplication --enable tenant/namespace
 //
-// 使用示例:
+// 使用示例：
 //
 //	bus.Send(ctx, "orders",
 //	    WithSequenceID(123),
@@ -163,9 +164,5 @@ func (bus *Pulbus) Send(ctx context.Context, topic string, messageOpts ...Produc
 
 // SendBytes 发送消息到指定 Topic
 func (bus *Pulbus) SendBytes(ctx context.Context, topic string, b []byte, messageOpts ...ProducerOption) error {
-	options := make([]ProducerOption, len(messageOpts)+1)
-	copy(options, messageOpts)
-	options[len(messageOpts)] = WithPayload(b)
-
-	return bus.Send(ctx, topic, options...)
+	return bus.Send(ctx, topic, append(slices.Clone(messageOpts), WithPayload(b))...)
 }

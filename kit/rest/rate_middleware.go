@@ -33,33 +33,29 @@ func RateLimitWithMemoryStore(limit, burst float64, expiresIn time.Duration) Rat
 
 // RateLimitMiddleware 限流器中间件，默认基于 IP 限流，每秒允许 10 个请求，桶容量为 20
 func RateLimitMiddleware(opts ...RateLimitOption) echo.MiddlewareFunc {
-	config := &middleware.RateLimiterConfig{
+	config := middleware.RateLimiterConfig{
 		Skipper: middleware.DefaultSkipper,
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
-			// 配置限流器：每秒允许 10 个请求，桶容量为 20
 			middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(10), Burst: 20, ExpiresIn: 0},
 		),
-		IdentifierExtractor: func(ctx echo.Context) (string, error) {
-			id := ctx.RealIP()
-			return id, nil
+		IdentifierExtractor: func(c echo.Context) (string, error) {
+			return c.RealIP(), nil
 		},
-		ErrorHandler: func(_ echo.Context, _ error) error {
-			return &Error{
-				Code:    http.StatusTooManyRequests,
-				Message: "请求太频繁，请稍后再试",
-			}
+		ErrorHandler: func(echo.Context, error) error {
+			return rateLimitExceeded()
 		},
-		DenyHandler: func(_ echo.Context, _ string, _ error) error {
-			return &Error{
-				Code:    http.StatusTooManyRequests,
-				Message: "请求太频繁，请稍后再试",
-			}
+		DenyHandler: func(echo.Context, string, error) error {
+			return rateLimitExceeded()
 		},
 	}
 
 	for _, opt := range opts {
-		opt(config)
+		opt(&config)
 	}
 
-	return middleware.RateLimiterWithConfig(*config)
+	return middleware.RateLimiterWithConfig(config)
+}
+
+func rateLimitExceeded() error {
+	return NewError(http.StatusTooManyRequests, "请求太频繁，请稍后再试")
 }

@@ -90,15 +90,14 @@ func RBACMiddleware(opts ...RBACMiddlewareOption) echo.MiddlewareFunc {
 				return next(c)
 			}
 
-			// 获取用户 token
 			token := c.Request().Header.Get(HeaderAuthToken)
 
+			// 权限键与项目代码以配置值优先，未配置时读取请求头
 			permissionKey := cfg.PermissionKey
 			if permissionKey == "" {
 				permissionKey = c.Request().Header.Get(HeaderPermissionKey)
 			}
 
-			// 获取项目代码，优先使用配置中的值
 			projectCode := cfg.ProjectCode
 			if projectCode == "" {
 				projectCode = c.Request().Header.Get(HeaderProjectCode)
@@ -109,9 +108,8 @@ func RBACMiddleware(opts ...RBACMiddlewareOption) echo.MiddlewareFunc {
 				hasPermission bool
 			)
 
-			// 获取用户信息和权限
+			// 远程验证要求携带 token，由权限服务返回用户与权限结果
 			if cfg.EnableRemoteAuth {
-				// 启用远程验证时，token 为必需字段
 				if token == "" {
 					return WrapError(http.StatusUnauthorized, authz.ErrUnauthorized)
 				}
@@ -140,25 +138,20 @@ func RBACMiddleware(opts ...RBACMiddlewareOption) echo.MiddlewareFunc {
 				hasPermission = authed.HasPermission
 			}
 
-			// 如果未使用远程验证且配置了静态用户信息（仅用于开发/测试环境）
+			// 静态用户仅用于开发与测试环境，视为拥有全部权限
 			if !cfg.EnableRemoteAuth && cfg.StaticUser != nil {
 				user = cfg.StaticUser
 				hasPermission = true
 			}
 
-			// 如果用户信息不为空
-			if user != nil {
-				// 设置用户信息到上下文
-				ctx.User = user
-				c.Set(ContextKeyUser, user)
-			}
-
-			// 检查用户信息是否跳过
 			if user == nil {
 				return WrapError(http.StatusUnauthorized, authz.ErrUnauthorized)
 			}
 
-			// 检查权限
+			// 用户信息在权限判定前写入上下文，供后续错误处理与日志使用
+			ctx.User = user
+			c.Set(ContextKeyUser, user)
+
 			if !hasPermission {
 				return WrapError(http.StatusForbidden, authz.ErrForbidden)
 			}

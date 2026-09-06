@@ -20,7 +20,7 @@ type HTMLTemplate struct {
 	Templates map[string]*template.Template
 }
 
-func (t *HTMLTemplate) Render(w io.Writer, name string, data interface{}, _ echo.Context) error {
+func (t *HTMLTemplate) Render(w io.Writer, name string, data any, _ echo.Context) error {
 	if t == nil || t.Templates[name] == nil {
 		return fmt.Errorf("HTML 模板不存在：%s", name)
 	}
@@ -28,8 +28,8 @@ func (t *HTMLTemplate) Render(w io.Writer, name string, data interface{}, _ echo
 	return t.Templates[name].ExecuteTemplate(w, name, data)
 }
 
-// LoadTemplates 从嵌入的文件系统中加载HTML模板
-// 使用例子:
+// LoadTemplates 从嵌入的文件系统中加载 HTML 模板
+// 使用例子：
 //
 // e.Renderer = rest.LoadTemplates(assets.TemplateFS, "templates")
 //
@@ -49,7 +49,7 @@ func LoadTemplates(tmpls embed.FS, templatesDir string) (ht *HTMLTemplate) {
 			return nil
 		}
 
-		name := strings.Replace(path, templatesDir+"/", "", 1)
+		name := strings.TrimPrefix(path, templatesDir+"/")
 
 		b, err := tmpls.ReadFile(path)
 		if err != nil {

@@ -71,7 +71,7 @@ func (tc TopicConfig) ShortName() string {
 // NamespaceFullName 返回完整的 namespace 路径
 // 例如：public/default
 func (tc TopicConfig) NamespaceFullName() string {
-	return fmt.Sprintf("%s/%s", tc.Tenant, tc.Namespace)
+	return tc.Tenant + "/" + tc.Namespace
 }
 
 // ParseTopic 解析 Topic 字符串，无效输入返回空 Topic
@@ -95,11 +95,12 @@ func ParseTopicName(topic string) (config TopicConfig, err error) {
 		return
 	}
 
-	domain := "persistent"
+	// 带 `://` 前缀的完整名称必须包含 tenant/namespace/topic 三段
+	before, after, qualified := strings.Cut(topic, "://")
+	domain, name := "persistent", before
 
-	name := topic
-	if prefix, rest, found := strings.Cut(topic, "://"); found {
-		domain, name = prefix, rest
+	if qualified {
+		domain, name = before, after
 	}
 
 	if domain != "persistent" && domain != "non-persistent" {
@@ -108,7 +109,7 @@ func ParseTopicName(topic string) (config TopicConfig, err error) {
 	}
 
 	parts := strings.Split(name, "/")
-	if strings.Contains(topic, "://") && len(parts) != 3 {
+	if qualified && len(parts) != 3 {
 		err = fmt.Errorf("完整 Topic 名称必须包含 tenant/namespace/topic")
 		return
 	}
@@ -178,7 +179,7 @@ func (tb *TopicBuilder) BuildPartitioned(topic string, partition int) string {
 
 // Namespace 返回 namespace 完整路径
 func (tb *TopicBuilder) Namespace() string {
-	return fmt.Sprintf("%s/%s", tb.tenant, tb.namespace)
+	return tb.tenant + "/" + tb.namespace
 }
 
 // NamespaceConfig Namespace 配置
@@ -189,7 +190,7 @@ type NamespaceConfig struct {
 
 // FullName 返回完整的 namespace 路径
 func (nc NamespaceConfig) FullName() string {
-	return fmt.Sprintf("%s/%s", nc.Tenant, nc.Namespace)
+	return nc.Tenant + "/" + nc.Namespace
 }
 
 // GetNamespace 获取 Namespace 配置

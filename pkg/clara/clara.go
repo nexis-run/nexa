@@ -4,12 +4,14 @@
 
 package clara
 
+import "slices"
+
 type Clara struct {
 	brokers []string
 }
 
 func New(brokers []string) *Clara {
 	return &Clara{
-		brokers: append([]string(nil), brokers...),
+		brokers: slices.Clone(brokers),
 	}
 }

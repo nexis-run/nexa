@@ -43,7 +43,7 @@ func (SoftDeleteMixin) Indexes() []ent.Index {
 }
 
 // Interceptors 默认过滤已软删除的记录
-func (mixin SoftDeleteMixin) Interceptors() []ent.Interceptor {
+func (SoftDeleteMixin) Interceptors() []ent.Interceptor {
 	return []ent.Interceptor{
 		SoftDeleteInterceptor(),
 	}

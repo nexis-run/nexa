@@ -37,26 +37,26 @@ func (r *Response) SetMessage(message string) *Response {
 // SetData 设置data
 // 仅过滤 nil 值，数值零值、空串和空结构体原样保留
 func (r *Response) SetData(data any) *Response {
-	if data == nil {
-		return r
+	if !isNil(data) {
+		r.Data = data
 	}
 
-	v := reflect.ValueOf(data)
-	if !v.IsValid() {
-		return r
+	return r
+}
+
+// isNil 判断接口值本身或其承载的指针类值是否为 nil
+func isNil(value any) bool {
+	if value == nil {
+		return true
 	}
 
 	// IsNil 仅对 chan/func/interface/map/pointer/slice 有效，其他类型会 panic
-	switch v.Kind() {
+	switch reflected := reflect.ValueOf(value); reflected.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		if v.IsNil() {
-			return r
-		}
+		return reflected.IsNil()
+	default:
+		return false
 	}
-
-	r.Data = data
-
-	return r
 }
 
 // SetParams 设置响应参数

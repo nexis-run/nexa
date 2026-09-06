@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
 
 	kr "github.com/go-kratos/kratos/v2/errors"
 	"github.com/labstack/echo/v4"
@@ -27,16 +26,8 @@ func handleHTTPError(err error, c echo.Context) {
 
 // responseFromError 统一错误状态与消息，服务端错误只记录在日志中
 func responseFromError(err error) *Response {
-	if err == nil {
+	if isNil(err) {
 		return nil
-	}
-
-	value := reflect.ValueOf(err)
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		if value.IsNil() {
-			return nil
-		}
 	}
 
 	response := NewResponse().SetCode(http.StatusInternalServerError)

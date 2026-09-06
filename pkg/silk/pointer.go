@@ -46,7 +46,7 @@ func Int64(i int64) *int64 {
 	return &i
 }
 
-// Int32 复制 int64 对象，并返回复制体的指针
+// Int32 复制 int32 对象，并返回复制体的指针
 func Int32(i int32) *int32 {
 	return &i
 }
@@ -55,7 +55,7 @@ func Pointer[T any](i T) *T {
 	return &i
 }
 
-// PointerConditionBool 指针条件判定, 返回bool
+// PointerConditionBool 指针条件判定，返回 bool
 func PointerConditionBool[T comparable](p *T, yes T) *bool {
 	if p == nil {
 		return nil

@@ -160,6 +160,8 @@ func Load[T Configurable](p string) (c T, err error) {
 }
 
 // IsVaild 检查日志配置是否合法
+//
+// Deprecated: 使用 IsValid
 func (l *Logger) IsVaild() bool {
 	return l.IsValid()
 }

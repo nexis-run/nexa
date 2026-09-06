@@ -23,16 +23,16 @@ type TimeMixin struct {
 
 func (t TimeMixin) Fields() []ent.Field {
 	creator := field.Time("created_at").Immutable()
-	updator := field.Time("updated_at")
+	updater := field.Time("updated_at")
 
 	if t.Optional {
 		creator.Optional().Nillable()
-		updator.Optional().Nillable()
+		updater.Optional().Nillable()
 	}
 
 	return []ent.Field{
 		creator.Default(time.Now),
-		updator.Default(time.Now).UpdateDefault(time.Now),
+		updater.Default(time.Now).UpdateDefault(time.Now),
 	}
 }
 
