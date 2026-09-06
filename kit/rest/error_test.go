@@ -18,14 +18,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gopkg.auroraride.com/rbac"
-
-	"nexis.run/nexa/kit/authz"
 )
 
 func TestWrapError(t *testing.T) {
-	err := WrapError(http.StatusUnauthorized, authz.ErrUnauthorized)
-	require.ErrorIs(t, err, authz.ErrUnauthorized)
+	err := WrapError(http.StatusUnauthorized, io.ErrUnexpectedEOF)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }
 
 func TestSendResponseUsesHTTPStatus(t *testing.T) {
@@ -55,25 +52,16 @@ type testContext struct {
 }
 
 func TestMiddlewareKeepsCustomContext(t *testing.T) {
-	user := &rbac.User{Uid: "test"}
-	middlewares := []echo.MiddlewareFunc{
-		RecoverMiddleware(),
-		RBACMiddleware(WithRBACRemoteAuth(false), WithRBACStaticUser(user)),
-		RBACMiddleware(WithRBACSkipper(func(echo.Context) bool { return true })),
-	}
+	e := echo.New()
+	ctx := &testContext{Context: NewContext("test", e.NewContext(
+		httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder(),
+	))}
+	handler := RecoverMiddleware()(func(c echo.Context) error {
+		require.Same(t, ctx, c)
+		return nil
+	})
 
-	for _, middleware := range middlewares {
-		e := echo.New()
-		ctx := &testContext{Context: NewContext("test", e.NewContext(
-			httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder(),
-		))}
-		handler := middleware(func(c echo.Context) error {
-			require.Same(t, ctx, c)
-			return nil
-		})
-
-		require.NoError(t, handler(ctx))
-	}
+	require.NoError(t, handler(ctx))
 }
 
 func TestWrappedResponseError(t *testing.T) {

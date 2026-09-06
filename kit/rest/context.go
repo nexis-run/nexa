@@ -10,30 +10,20 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/labstack/echo/v4"
-	"gopkg.auroraride.com/rbac"
 )
 
-const (
-	ContextKeyUser = "_user"
-)
-
-// Context Rest服务上下文
+// Context Rest 服务上下文
 type Context struct {
 	App string
 
 	echo.Context
-
-	User *rbac.User
 }
 
 // NewContext 创建上下文
 func NewContext(app string, c echo.Context) *Context {
-	user, _ := c.Get(ContextKeyUser).(*rbac.User)
-
 	return &Context{
 		App:     app,
 		Context: c,
-		User:    user,
 	}
 }
 

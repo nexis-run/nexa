@@ -108,9 +108,9 @@ server.Use(rest.CORSMiddleware(
 
 ### 权限客户端
 
-`authz.New` 创建独立客户端，调用方负责 `Close`。REST 通过 `WithRBACClient(client)` 使用指定实例；`authz.Setup` 提供进程级默认客户端并返回初始化错误，`authz.Close` 释放默认连接。
+`authz.New` 创建独立客户端，调用方负责 `Close`；`authz.Setup` 提供进程级默认客户端并返回初始化错误，`authz.Close` 释放默认连接。`kit/rest` 不依赖权限服务，REST 路由通过 `authz.Middleware` 接入权限校验，`authz.WithClient(client)` 指定客户端实例，未指定时使用默认客户端。
 
-路由所需权限通过 `WithRBACPermissionKey(key)` 绑定，项目通过 `WithRBACProjectCode(code)` 指定；非空配置优先于请求头。未配置时读取对应请求头，调用方负责在可信入口绑定权限与路由。
+路由所需权限通过 `authz.WithPermissionKey(key)` 绑定，项目通过 `authz.WithProjectCode(code)` 指定；非空配置优先于请求头。未配置时读取 `X-Auth-Token`、`X-Project-Code`、`X-Permission-Key` 请求头，调用方负责在可信入口绑定权限与路由。校验通过的用户通过 `authz.UserFromContext(c)` 读取。
 
 非本地连接应通过 `WithTransportCredentials` 配置 TLS。认证信息会写入 outgoing metadata，同时保留请求追踪等其他字段。
 

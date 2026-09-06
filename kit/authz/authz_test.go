@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -36,7 +35,7 @@ func (*testServer) GetRestrictedUser(_ context.Context, request *rbac.GetRestric
 
 	if hasUser {
 		user = &rbac.User{
-			Uid: uuid.New().String(),
+			Uid: testUID,
 		}
 	}
 
@@ -60,7 +59,10 @@ func (*testServer) GetUser(_ context.Context, request *rbac.GetUserRequest) (*rb
 	}, nil
 }
 
-func TestClient(t *testing.T) {
+// startTestServer 启动模拟权限服务并返回监听地址
+func startTestServer(t *testing.T) string {
+	t.Helper()
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
@@ -71,12 +73,17 @@ func TestClient(t *testing.T) {
 		_ = server.Serve(listener)
 	}()
 
-	t.Cleanup(func() {
-		_ = Close()
-		server.Stop()
-	})
+	t.Cleanup(server.Stop)
 
-	err = Setup(listener.Addr().String())
+	return listener.Addr().String()
+}
+
+func TestClient(t *testing.T) {
+	address := startTestServer(t)
+
+	t.Cleanup(func() { _ = Close() })
+
+	err := Setup(address)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
