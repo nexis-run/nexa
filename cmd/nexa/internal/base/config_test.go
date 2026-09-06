@@ -46,7 +46,8 @@ func TestLoadConfigStrictYAML(t *testing.T) {
 		"di:\n  daoStructName: bad-name\n",
 		"di:\n  daoProviderSetVar: _\n",
 		"di:\n  path: internal/di/di_test.go\n",
-		"ormclient: 'ent.Database; panic(1)'\n",
+		"ormClient: 'ent.Database; panic(1)'\n",
+		"ormclient: ent.Database\n",
 	} {
 		t.Run(content, func(t *testing.T) {
 			writeConfigFixture(t, path, content)
@@ -55,7 +56,7 @@ func TestLoadConfigStrictYAML(t *testing.T) {
 		})
 	}
 
-	writeConfigFixture(t, path, "entPath: internal/store\normclient: ent.Database\n")
+	writeConfigFixture(t, path, "entPath: internal/store\normClient: ent.Database\n")
 	config, err := LoadConfig(LoadOptions{ConfigPath: path, Explicit: true})
 	require.NoError(t, err)
 	require.Equal(t, root, config.RootDir)
@@ -138,7 +139,7 @@ func TestNewDefaultConfigDoesNotDecodeTarget(t *testing.T) {
 
 	encoded, err = config.MarshalYAMLBytes()
 	require.NoError(t, err)
-	require.Contains(t, string(encoded), "ormclient: \"\"")
+	require.Contains(t, string(encoded), "ormClient: \"\"")
 	require.NotContains(t, string(encoded), "rootdir")
 	require.NotContains(t, string(encoded), root)
 
@@ -204,9 +205,7 @@ func TestPhysicalRootAndModuleChanges(t *testing.T) {
 	require.NoError(t, err)
 
 	writeConfigFixture(t, filepath.Join(root, "internal/go.mod"), "module nested\n")
-
-	_, err = config.ResolveModule()
-	require.ErrorContains(t, err, "嵌套")
+	require.ErrorContains(t, config.Validate(), "嵌套")
 
 	config.EntPath = "ent"
 	config.DaoPath = "dao"

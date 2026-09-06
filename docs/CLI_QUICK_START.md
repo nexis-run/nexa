@@ -34,7 +34,7 @@ go test ./...
 nexa doctor
 ```
 
-`ent new` 创建 schema 文件，`ent generate` 生成 Ent 客户端和扩展代码，`new dao` 根据实体生成 DAO，`new echoctx` 创建 Echo Context。名称支持一次传入多个，必须是大写字母开头的 Go 标识符，且不能生成 `_test.go` 或带有系统、架构后缀的文件，例如 `User_Test`、`Rider_Linux`。
+`ent new` 创建 schema 文件，`ent generate` 生成 Ent 客户端和扩展代码，`new dao` 根据实体生成 DAO，`new echoctx` 创建 Echo Context。名称支持一次传入多个，必须是大写字母开头的 Go 标识符，且不能生成 `_test.go` 或带有系统、架构后缀的文件，例如 `User_Test`、`Rider_Linux`。`ent new` 默认混入 `TimeMixin` 与 `SoftDeleteMixin`，`--soft-delete=false` 只保留 `TimeMixin`；`new dao --all` 以当前全部 schema 作为名称，不能与名称同时使用。
 
 DAO 和 Echo Context 使用现有 Go 包声明，目录名可以与包名不同。生成前检查整批输出与其他源文件中的类型、函数和变量声明冲突；`--force` 只允许覆盖目标文件。schema 列表、DAO 预检和包名解析都遵守当前平台的 Go 构建约束，不解析被排除的源文件。
 
@@ -63,10 +63,10 @@ import _ "example.com/app/internal/infrastructure/ent/runtime"
 | `config show` | 输出合并默认值后的 YAML 或 JSON | 无 |
 | `config validate` | 校验配置字段、模块和输出路径 | 无 |
 | `doctor` | 只读检查 Go、配置、Ent、schema 与 DI | 无 |
-| `ent new NAME...` | 批量创建 Ent schema | `--force`、`--dry-run`、`--check` |
+| `ent new NAME...` | 批量创建 Ent schema | `--soft-delete=false`、`--force`、`--dry-run`、`--check` |
 | `ent generate` | 生成 Ent 客户端与扩展，别名为 `ent gen` | `--dry-run`、`--check` |
 | `ent list` | 静态列出 Ent schema | 无 |
-| `new dao NAME...` | 批量创建 DAO 并维护 DI | `--di=false`、`--force`、`--dry-run`、`--check` |
+| `new dao [NAME...]` | 批量创建 DAO 并维护 DI | `--all`、`--di=false`、`--force`、`--dry-run`、`--check` |
 | `new echoctx NAME...` | 批量创建 Echo Context | `--force`、`--dry-run`、`--check` |
 | `version` | 输出版本和构建信息 | 无 |
 | `completion SHELL` | 输出 Shell 补全脚本 | 无 |
@@ -98,7 +98,7 @@ nexa ent generate --check --json
 entPath: internal/infrastructure/ent
 daoPath: internal/infrastructure/dao
 echoctxPath: internal/app/rest/app
-ormclient: ''
+ormClient: ''
 entFeatures: []
 entTemplates: []
 di:
@@ -107,7 +107,7 @@ di:
   daoProviderSetVar: daoProviderSet
 ```
 
-输出路径以配置所属模块根目录为基准，不能越过模块边界或进入嵌套模块，输出目标不能是符号链接。配置拒绝未知字段、重复键、`null` 和多文档 YAML。`ormclient` 为空字符串时使用显式注入；非空时作为 DAO 构造器中的 Go 表达式，例如 `ent.Database`，对应表达式必须在项目中存在。
+输出路径以配置所属模块根目录为基准，不能越过模块边界或进入嵌套模块，输出目标不能是符号链接。配置拒绝未知字段、重复键、`null` 和多文档 YAML。`ormClient` 为空字符串时使用显式注入；非空时作为 DAO 构造器中的 Go 表达式，例如 `ent.Database`，对应表达式必须在项目中存在。
 
 ```bash
 nexa -c config/nexa.yaml config init

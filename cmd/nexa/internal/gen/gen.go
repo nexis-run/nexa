@@ -95,11 +95,6 @@ func (generator *Gen) preparePackage(configuredPath string, names []string) (dir
 		return
 	}
 
-	_, err = generator.Config.ResolveModule()
-	if err != nil {
-		return
-	}
-
 	directory, err = generator.Config.GetAbsPath(configuredPath)
 	if err != nil {
 		return

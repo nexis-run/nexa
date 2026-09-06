@@ -52,11 +52,7 @@ func TestPlanDAORejectsEntireInvalidBatch(t *testing.T) {
 	require.NoDirExists(t, directory)
 
 	require.NoError(t, os.WriteFile(filepath.Join(generator.Config.RootDir, "internal", "go.mod"), []byte("module nested\n"), 0644))
-	var files []fileplan.File
-
-	files, err = generator.PlanDAO([]string{"User"}, false, true)
-	require.ErrorContains(t, err, "嵌套")
-	require.Empty(t, files)
+	require.ErrorContains(t, generator.Config.Validate(), "嵌套")
 }
 
 func TestPlanUsesDeclaredPackageAndCustomClient(t *testing.T) {

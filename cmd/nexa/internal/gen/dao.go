@@ -12,7 +12,6 @@ import (
 	"nexis.run/nexa/cmd/nexa/internal/base"
 	"nexis.run/nexa/cmd/nexa/internal/fileplan"
 	"nexis.run/nexa/cmd/nexa/internal/parser"
-	"nexis.run/nexa/cmd/nexa/internal/schema"
 )
 
 // daoTemplateVariables 定义 DAO 模板变量
@@ -54,7 +53,7 @@ func (generator *Gen) PlanDAO(names []string, force bool, withDI bool) (files []
 		return
 	}
 
-	err = validateEntities(entDirectory, names)
+	err = generator.validateEntities(entDirectory, names)
 	if err != nil {
 		return
 	}
@@ -156,10 +155,11 @@ func (generator *Gen) planDI(names []string, daoDirectory, daoPackage string) (f
 	return
 }
 
-func validateEntities(entDirectory string, names []string) error {
+// validateEntities 要求每个名称都对应 schema 声明或已生成的 Ent 客户端字段
+func (generator *Gen) validateEntities(entDirectory string, names []string) error {
 	entities := make(map[string]bool)
 
-	schemaNames, err := schema.Names(filepath.Join(entDirectory, "schema"))
+	schemaNames, err := generator.Config.SchemaNames()
 	if err != nil {
 		return err
 	}

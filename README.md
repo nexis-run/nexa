@@ -54,9 +54,9 @@ nexa ent generate --check --json
 nexa config validate
 ```
 
-名称必须是大写字母开头的 Go 标识符，且不能生成 `_test.go` 或平台专属文件。DAO 与 Context 生成会检查整个包内的顶层声明冲突。生成命令支持批量预检、`--dry-run` 预览和 `--check` 差异检查。内容相同的文件不重写；初始化、schema、DAO 和 Echo Context 模板内容不同时，需要 `--force` 才能覆盖。`--check` 有差异返回状态码 `2`，其他错误返回 `1`。
+名称必须是大写字母开头的 Go 标识符，且不能生成 `_test.go` 或平台专属文件。`ent new` 默认混入时间与软删除字段，`--soft-delete=false` 只保留时间字段；`new dao --all` 为当前全部 schema 生成 DAO。DAO 与 Context 生成会检查整个包内的顶层声明冲突。生成命令支持批量预检、`--dry-run` 预览和 `--check` 差异检查。内容相同的文件不重写；初始化、schema、DAO 和 Echo Context 模板内容不同时，需要 `--force` 才能覆盖。`--check` 有差异返回状态码 `2`，其他错误返回 `1`。
 
-`new dao` 根据已有 Ent 实体生成代码，默认构造器接收 `*ent.Client`。DAO 提供 `Client()`、`Query()` 和 `Tx(tx)`，可使用当前实体客户端的完整类型化 API。默认配置的 DI 文件不存在时自动创建，已有 DI 保留自定义字段和 provider，并补齐请求实体的 Wire 字段名单。只生成 DAO 时使用 `--di=false`；需要生成 Wire 注入代码时，在应用的注入函数中提供 `*ent.Client`。显式设置 `ormclient` 时，DAO 使用该表达式创建无参数构造器。
+`new dao` 根据已有 Ent 实体生成代码，默认构造器接收 `*ent.Client`。DAO 提供 `Client()`、`Query()` 和 `Tx(tx)`，可使用当前实体客户端的完整类型化 API。默认配置的 DI 文件不存在时自动创建，已有 DI 保留自定义字段和 provider，并补齐请求实体的 Wire 字段名单。只生成 DAO 时使用 `--di=false`；需要生成 Wire 注入代码时，在应用的注入函数中提供 `*ent.Client`。显式设置 `ormClient` 时，DAO 使用该表达式创建无参数构造器。
 
 `ent generate` 在临时目录运行 Ent，成功后应用生成文件变更。手写文件不自动覆盖；带有 Ent 生成标记的过期文件会删除。该命令及其预览、检查模式都会执行项目 schema 代码，且依赖需事先准备好，生成过程不自动修改 `go.mod` 或 `go.sum`。
 

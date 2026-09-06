@@ -23,7 +23,7 @@ func (c *Config) Validate() (err error) {
 	if c.OrmClient != "" {
 		_, err = parser.ParseExpr(c.OrmClient)
 		if err != nil {
-			err = fmt.Errorf("ormclient 必须是有效的 Go 表达式：%w", err)
+			err = fmt.Errorf("ormClient 必须是有效的 Go 表达式：%w", err)
 			return
 		}
 	}
@@ -157,14 +157,9 @@ func (c *Config) validateCodePath(name, target string, directory bool) (absolute
 		return
 	}
 
-	var root, relative string
+	var relative string
 
-	root, err = canonicalPath(c.RootDir)
-	if err != nil {
-		return
-	}
-
-	relative, err = pathWithinRoot(root, absolute)
+	relative, err = pathWithinRoot(c.RootDir, absolute)
 	if err != nil {
 		err = fmt.Errorf("%s：%w", name, err)
 		return
@@ -187,7 +182,7 @@ func (c *Config) validateCodePath(name, target string, directory bool) (absolute
 		return
 	}
 
-	err = rejectNestedModules(root, packageDirectory)
+	err = rejectNestedModules(c.RootDir, packageDirectory)
 
 	return
 }

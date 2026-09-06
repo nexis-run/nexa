@@ -188,33 +188,23 @@ func (c *Config) GetDIPath() (string, error) {
 	return c.GetAbsPath(c.DI.Path)
 }
 
-// ResolvePackagePath 返回经过模块边界检查的导入路径
+// ResolvePackagePath 返回模块内目标目录对应的导入路径，目标须已通过 Validate 校验
 func (c *Config) ResolvePackagePath(target string) (packagePath string, err error) {
-	if c == nil || !filepath.IsAbs(c.RootDir) {
-		err = errors.New("配置根目录必须是绝对路径")
-		return
-	}
-
 	var modulePath string
 
-	modulePath, err = GetModule(c.RootDir)
+	modulePath, err = c.ResolveModule()
 	if err != nil {
 		return
 	}
 
-	var root, absolute, relative string
+	var absolute, relative string
 
-	root, err = canonicalPath(c.RootDir)
+	absolute, err = c.GetAbsPath(target)
 	if err != nil {
 		return
 	}
 
-	absolute, err = c.validateCodePath("代码目录", target, true)
-	if err != nil {
-		return
-	}
-
-	relative, err = filepath.Rel(root, absolute)
+	relative, err = pathWithinRoot(c.RootDir, absolute)
 	if err != nil {
 		return
 	}

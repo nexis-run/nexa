@@ -1,3 +1,4 @@
+{{- /*gotype: nexis.run/nexa/cmd/nexa/internal/entgen.schemaTemplateVariables*/ -}}
 package schema
 
 import (
@@ -7,39 +8,41 @@ import (
     "nexis.run/nexa/kit/entx"
 )
 
-// {{ . }} holds the schema definition for the {{ . }} entity.
-type {{ . }} struct {
+// {{ .Name }} holds the schema definition for the {{ .Name }} entity.
+type {{ .Name }} struct {
     ent.Schema
 }
 
-// Annotations of the {{ . }}.
-func ({{ . }}) Annotations() []schema.Annotation {
+// Annotations of the {{ .Name }}.
+func ({{ .Name }}) Annotations() []schema.Annotation {
     return []schema.Annotation{
-        entsql.Annotation{Table: "{{ snake . }}"},
+        entsql.Annotation{Table: "{{ snake .Name }}"},
         entsql.WithComments(true),
     }
 }
 
-// Fields of the {{ . }}.
-func ({{ . }}) Fields() []ent.Field {
+// Fields of the {{ .Name }}.
+func ({{ .Name }}) Fields() []ent.Field {
     return []ent.Field{
     }
 }
 
-// Indexes of the {{ . }}.
-func ({{ . }}) Indexes() []ent.Index {
+// Indexes of the {{ .Name }}.
+func ({{ .Name }}) Indexes() []ent.Index {
     return []ent.Index{}
 }
 
-// Edges of the {{ . }}.
-func ({{ . }}) Edges() []ent.Edge {
+// Edges of the {{ .Name }}.
+func ({{ .Name }}) Edges() []ent.Edge {
     return nil
 }
 
-// Mixin of the {{ . }}.
-func ({{ . }}) Mixin() []ent.Mixin {
+// Mixin of the {{ .Name }}.
+func ({{ .Name }}) Mixin() []ent.Mixin {
     return []ent.Mixin{
         entx.TimeMixin{},
+{{- if .SoftDelete }}
         entx.SoftDeleteMixin{},
+{{- end }}
     }
 }

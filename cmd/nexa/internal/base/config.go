@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
+
+	"nexis.run/nexa/cmd/nexa/internal/schema"
 )
 
 const DefaultConfigFile = ".nexa.yaml"
@@ -26,10 +28,10 @@ type LoadOptions struct {
 type Config struct {
 	cfgPath string
 
-	RootDir        string `json:"-" yaml:"-"` // Go 模块根目录，未初始化模块时为配置文件目录
+	RootDir        string `json:"-" yaml:"-"` // Go 模块根目录的物理路径，未初始化模块时为配置文件目录
 	ConfigFileName string `json:"-" yaml:"-"` // 配置文件名称
 
-	OrmClient string `json:"ormclient" yaml:"ormclient"` // 空值表示通过构造参数注入 Ent 客户端
+	OrmClient string `json:"ormClient" yaml:"ormClient"` // 空值表示通过构造参数注入 Ent 客户端
 
 	EntPath      string   `json:"entPath" yaml:"entPath"`
 	EntTemplates []string `json:"entTemplates" yaml:"entTemplates"`
@@ -245,14 +247,28 @@ func (c *Config) GetConfigFilePath() string {
 	return c.cfgPath
 }
 
-// ResolveModule 验证配置与文件系统并读取 Go 模块路径
+// ResolveModule 读取 Go 模块路径
 func (c *Config) ResolveModule() (module string, err error) {
-	err = c.Validate()
-	if err != nil {
+	if c == nil || !filepath.IsAbs(c.RootDir) {
+		err = errors.New("配置根目录必须是绝对路径")
 		return
 	}
 
 	module, err = GetModule(c.RootDir)
+
+	return
+}
+
+// SchemaNames 静态读取 Ent schema 目录中嵌入 Schema 或 View 的类型，不执行用户代码
+func (c *Config) SchemaNames() (names []string, err error) {
+	var entPath string
+
+	entPath, err = c.GetEntPath()
+	if err != nil {
+		return
+	}
+
+	names, err = schema.Names(filepath.Join(entPath, "schema"))
 
 	return
 }

@@ -22,8 +22,14 @@ var schemaTemplate = sync.OnceValues(func() (*template.Template, error) {
 	return template.New("schema").Funcs(gen.Funcs).Parse(TemplateNewSchema)
 })
 
+// schemaTemplateVariables 定义 schema 模板变量
+type schemaTemplateVariables struct {
+	Name       string
+	SoftDelete bool
+}
+
 // PlanNew 预检所有名称并渲染 schema，不写入项目文件
-func (eng *EntGen) PlanNew(names []string, force bool) (files []fileplan.File, err error) {
+func (eng *EntGen) PlanNew(names []string, force, softDelete bool) (files []fileplan.File, err error) {
 	err = base.ValidateNames(names)
 	if err != nil {
 		return
@@ -92,7 +98,7 @@ func (eng *EntGen) PlanNew(names []string, force bool) (files []fileplan.File, e
 	for _, name := range names {
 		var buffer bytes.Buffer
 
-		err = tmpl.Execute(&buffer, name)
+		err = tmpl.Execute(&buffer, schemaTemplateVariables{Name: name, SoftDelete: softDelete})
 		if err != nil {
 			return
 		}

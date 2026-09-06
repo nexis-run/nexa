@@ -19,11 +19,14 @@ func (app *application) entCommand() *cobra.Command {
 
 func (app *application) entNewCommand() *cobra.Command {
 	settings := &writeSettings{}
+
+	var softDelete bool
+
 	command := &cobra.Command{
 		Use:     "new NAME [NAME...]",
 		Short:   "批量创建 Ent schema",
 		Args:    exportedIdentifierArgs,
-		Example: examples("nexa ent new User Order", "nexa ent new User --dry-run"),
+		Example: examples("nexa ent new User Order", "nexa ent new Notice --soft-delete=false", "nexa ent new User --dry-run"),
 		RunE: func(command *cobra.Command, names []string) (err error) {
 			var generator *entgen.EntGen
 
@@ -34,7 +37,7 @@ func (app *application) entNewCommand() *cobra.Command {
 
 			var files []fileplan.File
 
-			files, err = generator.PlanNew(names, settings.force)
+			files, err = generator.PlanNew(names, settings.force, softDelete)
 			if err != nil {
 				return
 			}
@@ -44,6 +47,7 @@ func (app *application) entNewCommand() *cobra.Command {
 			return
 		},
 	}
+	command.Flags().BoolVar(&softDelete, "soft-delete", true, "混入软删除字段")
 	settings.bind(command, command.Flags(), true)
 
 	return command
