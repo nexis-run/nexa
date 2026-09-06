@@ -158,10 +158,10 @@ VERSION=0.1.1 make build-linux-amd64
 
 ## CI
 
-CI 在 PR、`master` 分支推送和手动触发时执行 `go test -race ./cmd/nexa/...` 和 `go vet ./cmd/nexa/...`，检查公开 CLI。
+CI 在 PR、`master` 分支推送和手动触发时，对除 `kit/authz` 外的全部包执行 `go test -race` 和 `go vet`。`kit/authz` 依赖私有 RBAC 模块，只在有访问权限的环境检查。
 
 ## 发布
 
-发布工作流由 `vX.Y.Z` 标签触发，标签必须对应稳定语义化版本。工作流验证公开 CLI，生成六个平台产物及 `checksums.txt`，先上传至草稿 Release，再公开发布。已公开版本不能被覆盖。
+发布工作流由 `vX.Y.Z` 标签触发，标签必须对应稳定语义化版本。工作流验证公开包，生成六个平台产物及 `checksums.txt`，为全部产物附加 GitHub 构建来源证明，先上传至草稿 Release，再公开发布。已公开版本不能被覆盖。产物来源可用 `gh attestation verify <文件> --repo nexis-run/nexa` 校验。
 
 安装入口使用默认分支的安装脚本，因此上线安装脚本时必须保证已有与其匹配的稳定 Release 和校验文件。发布操作与安装入口上线由维护者执行。

@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  cli:
-    name: Verify public CLI
+  public:
+    name: Verify public packages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -30,8 +30,13 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Run CLI tests
-        run: go test -race ./cmd/nexa/...
+      # kit/authz 依赖私有 RBAC 模块，公开环境无法编译
+      - name: List public packages
+        id: packages
+        run: echo "list=$(go list -e ./... | grep -v '/kit/authz' | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
 
-      - name: Check CLI code
-        run: go vet ./cmd/nexa/...
+      - name: Run tests
+        run: go test -race ${{ steps.packages.outputs.list }}
+
+      - name: Check code
+        run: go vet ${{ steps.packages.outputs.list }}

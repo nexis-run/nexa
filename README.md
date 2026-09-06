@@ -150,11 +150,11 @@ Pulsar 消费随上下文取消或客户端关闭退出，正在执行的用户 
 
 ## 开发与发布
 
-需要 `go.mod` 指定的 Go 版本。公开 CLI 可以独立构建和检查：
+需要 `go.mod` 指定的 Go 版本。`kit/authz` 依赖私有 RBAC 模块，其余包可以独立构建和检查：
 
 ```bash
-go test ./cmd/nexa/...
-go vet ./cmd/nexa/...
+go test -race $(go list -e ./... | grep -v '/kit/authz')
+go vet $(go list -e ./... | grep -v '/kit/authz')
 go build -o bin/nexa ./cmd/nexa
 ```
 
@@ -166,9 +166,9 @@ go test -race ./...
 go vet ./...
 ```
 
-Pulsar 集成检查需要实际服务，配置方式见对应测试文件。CI 在 PR、`master` 分支推送和手动触发时检查公开 CLI。
+Pulsar 集成检查需要实际服务，配置方式见对应测试文件。CI 在 PR、`master` 分支推送和手动触发时检查除 `kit/authz` 外的全部包。
 
-发布由 `vX.Y.Z` 稳定版本标签触发，生成 Linux、macOS、Windows 的 amd64／arm64 六个平台文件和 `checksums.txt`。Linux CLI 不依赖动态 glibc。详细构建和发布要求见 [CLI 快速入门](docs/CLI_QUICK_START.md)。
+发布由 `vX.Y.Z` 稳定版本标签触发，生成 Linux、macOS、Windows 的 amd64／arm64 六个平台文件和 `checksums.txt`，并为全部产物附加 GitHub 构建来源证明，可用 `gh attestation verify <文件> --repo nexis-run/nexa` 校验。Linux CLI 不依赖动态 glibc。详细构建和发布要求见 [CLI 快速入门](docs/CLI_QUICK_START.md)。
 
 ## License
 

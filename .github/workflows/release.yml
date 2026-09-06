@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: 'release-${{ github.ref }}'
@@ -29,10 +31,12 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Verify CLI
+      # kit/authz 依赖私有 RBAC 模块，公开环境无法编译
+      - name: Verify public packages
         run: |
-          go test ./cmd/nexa/...
-          go vet ./cmd/nexa/...
+          packages=$(go list -e ./... | grep -v '/kit/authz')
+          go test $packages
+          go vet $packages
 
       - name: Read release metadata
         id: metadata
@@ -67,6 +71,11 @@ jobs:
             exit 1
           fi
           sha256sum nexa-* > checksums.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-path: 'bin/*'
 
       - name: Publish GitHub release
         env:
