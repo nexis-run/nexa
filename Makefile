@@ -1,4 +1,7 @@
-.PHONY: clean all build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 build-windows-amd64 build-windows-arm64
+PLATFORMS = linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64 windows-arm64
+BUILD_TARGETS = $(addprefix build-,$(PLATFORMS))
+
+.PHONY: clean all $(BUILD_TARGETS)
 
 check_version = \
 	$(if $(VERSION),,$(error 请通过 VERSION=xxx 指定版本号))
@@ -15,41 +18,12 @@ clean:
 	@echo "正在清理构建文件..."
 	rm -rf bin/
 
-build-linux-amd64:
+# 目标名形如 build-<GOOS>-<GOARCH>，Windows 产物追加 .exe 后缀
+$(BUILD_TARGETS): build-%:
 	$(call check_version)
-	@echo "构建 linux/amd64（版本：$(VERSION)，提交：$(HASH)）"
+	@echo "构建 $(subst -,/,$*)（版本：$(VERSION)，提交：$(HASH)）"
 	@mkdir -p bin
-	GOOS=linux GOARCH=amd64 $(GO_BUILD) -o bin/nexa-linux-amd64 ./cmd/nexa
+	GOOS=$(firstword $(subst -, ,$*)) GOARCH=$(lastword $(subst -, ,$*)) $(GO_BUILD) -o bin/nexa-$*$(if $(filter windows-%,$*),.exe) ./cmd/nexa
 
-build-linux-arm64:
-	$(call check_version)
-	@echo "构建 linux/arm64（版本：$(VERSION)，提交：$(HASH)）"
-	@mkdir -p bin
-	GOOS=linux GOARCH=arm64 $(GO_BUILD) -o bin/nexa-linux-arm64 ./cmd/nexa
-
-build-darwin-amd64:
-	$(call check_version)
-	@echo "构建 darwin/amd64（版本：$(VERSION)，提交：$(HASH)）"
-	@mkdir -p bin
-	GOOS=darwin GOARCH=amd64 $(GO_BUILD) -o bin/nexa-darwin-amd64 ./cmd/nexa
-
-build-darwin-arm64:
-	$(call check_version)
-	@echo "构建 darwin/arm64（版本：$(VERSION)，提交：$(HASH)）"
-	@mkdir -p bin
-	GOOS=darwin GOARCH=arm64 $(GO_BUILD) -o bin/nexa-darwin-arm64 ./cmd/nexa
-
-build-windows-amd64:
-	$(call check_version)
-	@echo "构建 windows/amd64（版本：$(VERSION)，提交：$(HASH)）"
-	@mkdir -p bin
-	GOOS=windows GOARCH=amd64 $(GO_BUILD) -o bin/nexa-windows-amd64.exe ./cmd/nexa
-
-build-windows-arm64:
-	$(call check_version)
-	@echo "构建 windows/arm64（版本：$(VERSION)，提交：$(HASH)）"
-	@mkdir -p bin
-	GOOS=windows GOARCH=arm64 $(GO_BUILD) -o bin/nexa-windows-arm64.exe ./cmd/nexa
-
-all: build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 build-windows-amd64 build-windows-arm64
+all: $(BUILD_TARGETS)
 	@echo "全部平台构建完成"

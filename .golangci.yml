@@ -24,8 +24,6 @@ linters:
           - revive
         text: "should have a package comment|package comment should be of the form"
   settings:
-    lll:
-      line-length: 200
     custom:
       gclint:
         type: module
